@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PHYS-VTO 試穿</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="styles.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <button class="icon-btn only-narrow" id="toggleRail" aria-label="商品列表"><i class="ti ti-layout-sidebar"></i></button>
+    <span class="brand">PHYS-VTO</span>
+    <label class="search">
+      <i class="ti ti-search" aria-hidden="true"></i>
+      <input id="search" type="search" placeholder="白色短袖、襯衫、外套" autocomplete="off">
+    </label>
+    <label class="btn" title="上傳衣服平面圖">
+      <i class="ti ti-upload" aria-hidden="true"></i><span class="hide-narrow">上傳平面圖</span>
+      <input id="upload" type="file" accept="image/*" hidden>
+    </label>
+    <span class="stat" id="fpsStat">— FPS</span>
+    <span class="stat hide-narrow" id="latencyStat">延遲 —</span>
+    <button class="icon-btn only-narrow" id="toggleSide" aria-label="尺寸建議"><i class="ti ti-ruler-measure"></i></button>
+  </header>
+
+  <main class="layout" id="layout">
+    <aside class="rail" id="rail">
+      <div class="tabs" id="categoryTabs" role="tablist"></div>
+      <div class="product-grid" id="productGrid"></div>
+    </aside>
+
+    <section class="pane cam-pane" id="camPane">
+      <video id="video" playsinline muted></video>
+      <canvas id="poseCanvas"></canvas>
+      <span class="chip chip-tl"><i class="ti ti-camera" aria-hidden="true"></i> 鏡頭（鏡像）</span>
+      <span class="chip chip-bl" id="trackStatus">示範動作</span>
+      <div class="chip-br">
+        <button class="chip-btn" id="toggleSkeleton" aria-pressed="true">骨架 開</button>
+        <button class="chip-btn primary" id="startCam"><i class="ti ti-video" aria-hidden="true"></i> 開啟鏡頭</button>
+      </div>
+    </section>
+
+    <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" aria-label="調整鏡頭與人偶比例" tabindex="0"></div>
+
+    <section class="pane stage-pane" id="stagePane">
+      <div id="viewer"></div>
+      <span class="chip chip-tl" id="garmentLabel">尚未選擇衣服</span>
+      <span class="chip chip-tr muted" id="garmentNote">依選定號碼生成</span>
+      <div class="segmented chip-bl" id="simMode" role="radiogroup" aria-label="模擬方式">
+        <button data-mode="none">無物理</button>
+        <button data-mode="xpbd" class="active">XPBD</button>
+        <button data-mode="xpbd_nn">XPBD＋NN</button>
+      </div>
+    </section>
+
+    <aside class="side" id="side">
+      <section class="block">
+        <h2>你的身體數值</h2>
+        <div class="body-form" id="bodyForm"></div>
+        <p class="hint" id="derivedHint"></p>
+      </section>
+      <section class="block" id="sizeBlock">
+        <h2>建議尺寸</h2>
+        <div id="sizeContent"></div>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="bottombar">
+    <span class="label">搭配建議</span>
+    <div class="outfits" id="outfits"></div>
+    <span class="metrics" id="metrics"></span>
+  </footer>
+
+  <div class="scrim" id="scrim"></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

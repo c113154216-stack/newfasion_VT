@@ -6,6 +6,24 @@ PHYS-VTO（結合參數化人體與布料物理模擬之低延遲虛擬試穿研
 - 平面圖轉三維衣物模板
 - Three.js 畫面：試穿、尺寸結論、推薦與搭配
 
+## 試穿網站（`web/`）
+
+純 HTML＋Three.js，不需要打包工具。目前商品、尺寸表、搭配都是假資料（`web/js/mock-data.js`），之後換成後端 API。
+
+```bash
+python -m http.server 8765 --directory web
+```
+
+開 http://localhost:8765 。鏡頭需要 localhost 或 HTTPS 才能開；沒開鏡頭時會跑示範動作。
+
+| 檔案 | 內容 |
+|---|---|
+| `web/js/main.js` | 狀態、畫面組裝、事件 |
+| `web/js/viewer.js` | Three.js 人偶與衣服（目前是簡化幾何，之後換 SMPL-X 與生成的衣服網格） |
+| `web/js/pose.js` | Webcam＋MediaPipe Pose；示範動作 |
+| `web/js/sizing.js` | 尺寸判定（計畫書表 2-1）與建議號碼 |
+| `web/js/mock-data.js` | 假資料 |
+
 ## 目錄
 
 | 路徑 | 內容 |
