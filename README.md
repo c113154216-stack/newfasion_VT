@@ -23,6 +23,13 @@ python -m http.server 8765 --directory web
 | `web/js/pose.js` | Webcam＋MediaPipe Pose；示範動作 |
 | `web/js/sizing.js` | 尺寸推薦：判定（計畫書表 2-1）與建議號碼（林宇鑫負責） |
 | `web/js/mock-data.js` | 假資料 |
+| `web/tests/sizing.test.mjs` | 尺寸推薦的自動測試 |
+
+尺寸推薦的測試（需要 Node.js 22 以上）：
+
+```bash
+node --test web/tests/sizing.test.mjs
+```
 
 ### 屬於其他組員、目前註解停用的功能
 
