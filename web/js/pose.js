@@ -1,3 +1,10 @@
+// ⚠ 負責人：趙丞章（Webcam 姿態與即時資料）
+// 鏡頭開啟、MediaPipe 偵測、關鍵點轉角度（toAngles）是趙丞章的工作範圍。
+// 林宇鑫先寫了一版參考實作，目前「註解停用」，沒有刪除：
+//   - startCamera() 內的實作、toAngles()、_handle() 裡送出姿勢的那一行
+// 保留中的只有畫面需要的部分：示範骨架的繪製。
+// 接手時把註解拿掉即可恢復，或照下方的角度格式換成自己的版本。
+//
 // Webcam 姿態來源：開啟鏡頭時用 MediaPipe Pose（BlazePose，33 個關鍵點），
 // 還沒開鏡頭或失敗時用「示範動作」產生假的關鍵點，畫面和人偶都照樣能動。
 //
@@ -48,6 +55,10 @@ export class PoseSource {
   }
 
   async startCamera() {
+    // 停用中：鏡頭追蹤由趙丞章負責，參考實作保留在下方註解。
+    this.onStatus({ text: "鏡頭追蹤尚未接上（趙丞章）", kind: "warn" });
+    return false;
+    /* ---- 參考實作（停用）----
     this.onStatus({ text: "載入姿態模型…", kind: "muted" });
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -81,6 +92,7 @@ export class PoseSource {
       this.onStatus({ text: denied ? "鏡頭權限被拒，改用示範動作" : "鏡頭無法使用，改用示範動作", kind: "warn" });
       return false;
     }
+    ---- 參考實作結束 ---- */
   }
 
   stopCamera() {
@@ -133,7 +145,8 @@ export class PoseSource {
     }
     // 人離開畫面：不送新姿勢，人偶停在最後一個穩定姿勢（計畫書 2.2）
     if (!visible) return;
-    this.onPose(toAngles(landmarks, frame), { latencyMs, source: this.mode });
+    // 停用中：關鍵點轉角度由趙丞章負責，接上後把下一行的註解拿掉
+    // this.onPose(toAngles(landmarks, frame), { latencyMs, source: this.mode });
   }
 
   _draw(landmarks, frame) {
@@ -184,6 +197,7 @@ function vis(p) {
   return p && (p.visibility === undefined || p.visibility > 0.5);
 }
 
+/* ---- 停用中（趙丞章負責）：關鍵點 → 人偶角度的參考實作 ----
 // 關鍵點 → 人偶角度。關鍵點是鏡頭原始座標，先鏡像成「螢幕座標」再算。
 // 人的右手（12/14/16）鏡像後出現在螢幕右邊。
 function toAngles(lm, frame) {
@@ -221,6 +235,7 @@ function toAngles(lm, frame) {
     head: clamp(head, -0.6, 0.6),
   };
 }
+---- 參考實作結束 ---- */
 
 // 示範動作：用簡單的 2D 正向運動學產生 33 點中會用到的幾個點（螢幕座標），
 // 再轉回鏡頭原始座標（x 鏡像），讓示範與真鏡頭走同一條計算路徑。

@@ -1,5 +1,6 @@
 import { CATEGORIES, PRODUCTS, OUTFIT_RULES, DEFAULT_BODY } from "./mock-data.js";
-import { deriveBody, recommend, evaluateSize, adviceText } from "./sizing.js";
+// adviceText 屬於尺寸判定（趙丞章），停用中
+import { deriveBody, recommend, evaluateSize /*, adviceText */ } from "./sizing.js";
 import { Viewer } from "./viewer.js";
 import { PoseSource } from "./pose.js";
 
@@ -256,6 +257,23 @@ function renderSize() {
   }
   const rec = state.rec;
   const parts = evaluateSize(state.body, p, state.size);
+  if (rec.pending) {
+    // 尺寸判定停用中（趙丞章負責）：只列號碼與成衣尺寸，可以切換號碼看衣服
+    box.innerHTML = `
+    <div class="sizes" role="radiogroup" aria-label="號碼">
+      ${rec.sizes
+        .map(
+          (s) => `<button class="size-btn ${s === state.size ? "active" : ""}" data-size="${s}" role="radio" aria-checked="${s === state.size}">${s}</button>`,
+        )
+        .join("")}
+    </div>
+    <div class="parts">
+      ${parts.map((x) => `<span class="pname">${x.label}</span><span class="pval">${x.garment} cm</span><span></span><span class="status na">待判定</span>`).join("")}
+    </div>
+    <p class="advice">尺寸判定尚未接上（趙丞章負責），目前不提供建議號碼。</p>`;
+    return;
+  }
+  /* ---- 停用中（趙丞章負責）：判定結果的顯示，接上 adviceText 後恢復 ----
   const advice = adviceText(p, state.size, parts, rec);
   box.innerHTML = `
     <div class="sizes" role="radiogroup" aria-label="號碼">
@@ -271,6 +289,7 @@ function renderSize() {
     </div>
     <p class="advice ${advice.warn ? "warn" : ""}">${advice.text}</p>
     <p class="hint">差值＝成衣 − 身體；綠色區間為${p.fit === "loose" ? "寬鬆版" : "修身版"}合身範圍（計畫書表 2-1）。</p>`;
+  ---- 結束 ---- */
 }
 
 function partRow(p) {

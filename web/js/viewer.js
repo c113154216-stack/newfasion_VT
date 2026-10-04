@@ -1,3 +1,9 @@
+// ⚠ 分工：
+//   - 衣服顯示、畫面（本檔大部分）：林宇鑫
+//   - 人偶本體（SMPL-X 本人模型）與「姿勢 → 關節」的動作映射：紀泓宇
+//     目前的人偶是畫面用的替身，保留；動作映射（_applyPose 裡設定關節角度的部分）
+//     是林宇鑫先寫的參考實作，目前「註解停用」，沒有刪除，人偶維持靜止站姿。
+//
 // 3D 網格人偶＋衣服（Three.js）。
 // 現在的人偶是用基本幾何組出來的替身，衣服也是依尺寸表算出來的簡化外形；
 // 之後換成紀泓宇的 SMPL-X 本人模型，以及我們生成的衣服網格（GLB）。
@@ -325,6 +331,14 @@ export class Viewer {
     cur.lean += (tgt.lean - cur.lean) * k;
     cur.head += (tgt.head - cur.head) * k;
 
+    const { armL, armR } = this.rig;
+    // 停用期間：人偶固定在自然站姿（雙手微張）
+    armR.shoulder.rotation.z = 0.25;
+    armR.elbow.rotation.z = 0.05;
+    armL.shoulder.rotation.z = -0.25;
+    armL.elbow.rotation.z = -0.05;
+
+    /* ---- 停用中（紀泓宇負責）：姿勢角度 → 人偶關節的參考實作 ----
     const { spine, neck, armL, armR } = this.rig;
     // 角度定義見 pose.js；spine 往右傾要繞 z 軸轉負角度，子物件的手臂要扣回去
     spine.rotation.z = -cur.lean;
@@ -333,6 +347,7 @@ export class Viewer {
     armR.elbow.rotation.z = cur.right.fore - cur.right.upper;
     armL.shoulder.rotation.z = cur.left.upper + cur.lean;
     armL.elbow.rotation.z = cur.left.fore - cur.left.upper;
+    ---- 參考實作結束 ---- */
 
     // 下擺擺動：簡單的彈簧阻尼，由軀幹轉動速度帶動（物理還沒接上前的示意）
     if (this.garment) {

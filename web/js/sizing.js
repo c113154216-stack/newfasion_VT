@@ -1,8 +1,15 @@
+// ⚠ 負責人：趙丞章（尺寸表比對）
+// 判定規則（classify / evaluateSize 的差值與鬆緊、recommend 的選號、adviceText）
+// 是趙丞章的工作範圍。林宇鑫先寫的參考實作目前「註解停用」，沒有刪除。
+// 停用期間：recommend() 只回傳號碼清單（pending: true），畫面不顯示建議與鬆緊。
+// deriveBody() 是畫面用的身體估算，保留。
+//
 // 尺寸判定：成衣尺寸 − 身體尺寸，依計畫書表 2-1 分成偏緊／合身／偏寬。
 // 建議號碼的規則（與組員討論後）：每個部位都 ≥ 合身下限的號碼中，取最小的那一個。
 
 export const PART_LABELS = { chest: "胸圍", shoulder: "肩寬", length: "衣長" };
 
+/* ---- 停用中（趙丞章負責）：合身區間（表 2-1）----
 // [合身下限, 合身上限]，單位 cm
 const FIT_RANGES = {
   slim: { chest: [4, 10], shoulder: [0, 3], length: [-2, 2] },
@@ -15,6 +22,7 @@ function rangesFor(product) {
   if (product.longLength) delete ranges.length;
   return ranges;
 }
+---- 參考實作結束 ---- */
 
 // 肩寬與衣長參考值：正式版由紀泓宇的 SMPL-X 本人模型量測，這裡先用身高估算
 export function deriveBody(input) {
@@ -25,10 +33,13 @@ export function deriveBody(input) {
   };
 }
 
+/* ---- 停用中（趙丞章負責）
 function bodyValue(body, part) {
   return part === "length" ? body.lengthRef : body[part];
 }
+---- 參考實作結束 ---- */
 
+/* ---- 停用中（趙丞章負責）：classify / evaluateSize / recommend / adviceText 參考實作 ----
 export function classify(diff, [lo, hi]) {
   if (diff < lo) return "tight";
   if (diff > hi) return "loose";
@@ -79,6 +90,22 @@ export function adviceText(product, size, parts, rec) {
     };
   }
   return { text: `${size} 不會緊，但比建議的 ${rec.recommended} 寬鬆。`, warn: false };
+}
+---- 參考實作結束 ---- */
+
+// ---- 停用期間的替代版本：只列號碼和成衣尺寸，不做判定 ----
+export function recommend(body, product) {
+  if (!product.sizeChart) return null;
+  const sizes = Object.keys(product.sizeChart);
+  // 尚未判定，先預設中間的號碼讓衣服有東西可以顯示
+  return { sizes, recommended: sizes[Math.floor((sizes.length - 1) / 2)], pending: true };
+}
+
+export function evaluateSize(body, product, size) {
+  const chart = product.sizeChart[size];
+  return Object.keys(PART_LABELS)
+    .filter((part) => chart[part] !== undefined)
+    .map((part) => ({ part, label: PART_LABELS[part], garment: chart[part], status: "na" }));
 }
 
 function round1(v) {
