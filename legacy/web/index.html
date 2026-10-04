@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>3D 虛擬試穿 — 開發測試頁</title>
+  <link rel="stylesheet" href="/web/styles.css">
+</head>
+<body>
+  <header>
+    <h1>3D 虛擬試穿開發頁</h1>
+    <p class="muted">同源呼叫 Flask API。請先啟動後端，再開 <code>http://127.0.0.1:5000/</code></p>
+  </header>
+
+  <section>
+    <h2>1. 健康檢查</h2>
+    <button type="button" id="healthBtn">檢查 /api/health</button>
+    <pre id="healthResult"></pre>
+  </section>
+
+  <section>
+    <h2>2. 上架商品</h2>
+    <form id="uploadForm">
+      <label>名稱 <input type="text" id="productName" placeholder="白色短袖" required></label>
+      <label>分類 <input type="text" id="productCategory" placeholder="top / bottom / outer / dress" required></label>
+      <label>圖片 <input type="file" id="productImage" accept="image/*" required></label>
+      <button type="submit">上架</button>
+    </form>
+    <pre id="uploadResult"></pre>
+  </section>
+
+  <section>
+    <h2>3. 文字推薦</h2>
+    <div class="row">
+      <input type="text" id="queryText" placeholder="例如：白色短袖 T 恤" value="白色短袖 T 恤">
+      <button type="button" id="searchBtn">搜尋</button>
+    </div>
+    <div id="searchResults" class="results"></div>
+  </section>
+
+  <section>
+    <h2>4. 圖片路徑推薦</h2>
+    <p class="warn">後端 <code>query_image</code> 目前只接受伺服器本機已存在的檔案路徑，不支援從瀏覽器直接上傳照片搜尋。</p>
+    <div class="row">
+      <input type="text" id="queryImagePath" value="data/uploads/products/1.jpg" placeholder="伺服器上的圖片路徑">
+      <button type="button" id="imageSearchBtn">用這張圖搜尋</button>
+    </div>
+    <div id="imageSearchResults" class="results"></div>
+  </section>
+
+  <section>
+    <h2>5. 試穿</h2>
+    <p class="muted">點推薦卡片可帶入 product_id。目前回傳 stub GLB，不是真實試穿結果。</p>
+    <form id="tryonForm">
+      <label>product_id <input type="number" id="tryonProductId" min="1" required></label>
+      <label>size <input type="text" id="tryonSize" value="M"></label>
+      <label>身高 cm <input type="number" id="heightCm" value="175" min="140" max="220" step="0.1"></label>
+      <label>胸圍 cm <input type="number" id="chestCm" value="92" min="60" max="150" step="0.1"></label>
+      <label>腰圍 cm <input type="number" id="waistCm" value="78" min="50" max="140" step="0.1"></label>
+      <label>臀圍 cm <input type="number" id="hipCm" value="96" min="60" max="160" step="0.1"></label>
+      <button type="submit">開始試穿</button>
+    </form>
+    <pre id="tryonResult"></pre>
+    <p id="tryonLink"></p>
+  </section>
+
+  <section>
+    <h2>6. 穿搭推薦（找搭配，OutfitTransformer）</h2>
+    <p class="muted">勾選 1 件以上已上架的商品，輸入想找的目標分類（例如 bottom / top / outer / dress），用訓練好的 OutfitTransformer 找出資料庫裡最搭的商品。</p>
+    <div id="productPicker" class="picker">載入中...</div>
+    <div class="row" style="margin-top:12px">
+      <input type="text" id="targetCategory" placeholder="想找的分類，例如 bottom" value="bottom">
+      <button type="button" id="outfitCompleteBtn">找搭配</button>
+    </div>
+    <div id="outfitCompleteResults" class="results"></div>
+  </section>
+
+  <script src="/web/app.js"></script>
+</body>
+</html>

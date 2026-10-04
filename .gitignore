@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.env
+
+# SMPL-X 權重：授權禁止公開散布，各自到 https://smpl-x.is.tue.mpg.de/ 下載
+**/*.npz
+**/*.pkl
+**/*.pth
+**/*.pt
+**/*.onnx
+
+# 衣服模板 OBJ：疑似來自 MGN 資料集（限非商用、需註冊），來源確認前不上傳
+legacy/geometry_physics/assets/garments/*.obj
+
+# 計畫書 PDF 含組員學號，不放公開 repo
+docs/proposal/*.pdf
+
+# 執行時輸出
+data/outputs/
+legacy/data/outputs/
+output/
+
+# 系統檔
+.DS_Store
+Thumbs.db
+desktop.ini

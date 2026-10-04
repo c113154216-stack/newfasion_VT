@@ -1,0 +1,142 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Segoe UI", "Noto Sans TC", sans-serif;
+  max-width: 920px;
+  margin: 32px auto;
+  padding: 0 16px 48px;
+  color: #1f2937;
+  background: #f6f7f9;
+}
+
+header h1 {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+}
+
+section {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+h2 {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+}
+
+.muted {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.warn {
+  color: #b45309;
+  font-size: 0.9rem;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+form label {
+  display: block;
+  margin-bottom: 10px;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="file"] {
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  min-width: 220px;
+}
+
+button {
+  padding: 6px 12px;
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #1d4ed8;
+}
+
+pre {
+  background: #f3f4f6;
+  padding: 10px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+}
+
+.results {
+  margin-top: 12px;
+}
+
+.card {
+  display: inline-block;
+  width: 148px;
+  margin: 8px 8px 8px 0;
+  padding: 8px;
+  text-align: center;
+  vertical-align: top;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.card:hover {
+  border-color: #2563eb;
+}
+
+.card img {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border: 1px solid #e5e7eb;
+}
+
+.card .meta {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.picker-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.picker-item:hover {
+  border-color: #2563eb;
+}
+
+.picker-item img {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 4px;
+}

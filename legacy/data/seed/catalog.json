@@ -1,0 +1,152 @@
+[
+  {
+    "name": "白色短袖 T 恤",
+    "category": "top",
+    "description": "素面圓領短袖，適合當測試用上衣公版。",
+    "size_chart": {
+      "S": {"chest": 88, "length": 66},
+      "M": {"chest": 96, "length": 68},
+      "L": {"chest": 104, "length": 70}
+    },
+    "garment_template_id": "tshirt_base.glb",
+    "image": "01_white_tee.jpg",
+    "mock_image": "013_white_t-shirt.png",
+    "color": [245, 245, 245],
+    "label": "TEE"
+  },
+  {
+    "name": "海軍藍牛津襯衫",
+    "category": "top",
+    "description": "長袖襯衫剪裁，用於襯衫類幾何校正測試。",
+    "size_chart": {
+      "S": {"chest": 92, "length": 70},
+      "M": {"chest": 100, "length": 72},
+      "L": {"chest": 108, "length": 74}
+    },
+    "garment_template_id": "shirt_base.glb",
+    "image": "02_navy_shirt.jpg",
+    "mock_image": "005_blue_t-shirt.png",
+    "color": [25, 45, 85],
+    "label": "SHIRT"
+  },
+  {
+    "name": "卡其直筒長褲",
+    "category": "bottom",
+    "description": "中腰直筒長褲，用於下身公版與尺寸拉伸。",
+    "size_chart": {
+      "S": {"waist": 74, "hip": 92, "length": 98},
+      "M": {"waist": 80, "hip": 98, "length": 100},
+      "L": {"waist": 86, "hip": 104, "length": 102}
+    },
+    "garment_template_id": "pants_base.glb",
+    "image": "03_khaki_pants.jpg",
+    "mock_image": "018_green_jeans.png",
+    "color": [196, 176, 130],
+    "label": "PANTS"
+  },
+  {
+    "name": "黑色牛仔短褲",
+    "category": "bottom",
+    "description": "五分牛仔短褲，用於短褲類碰撞範圍測試。",
+    "size_chart": {
+      "S": {"waist": 72, "hip": 90, "length": 42},
+      "M": {"waist": 78, "hip": 96, "length": 44},
+      "L": {"waist": 84, "hip": 102, "length": 46}
+    },
+    "garment_template_id": "shorts_base.glb",
+    "image": "04_black_shorts.jpg",
+    "mock_image": "010_black_jeans.png",
+    "color": [30, 30, 35],
+    "label": "SHORTS"
+  },
+  {
+    "name": "米色風衣",
+    "category": "outer",
+    "description": "中長版風衣，用於外套層次與衣長拉伸。",
+    "size_chart": {
+      "S": {"chest": 100, "length": 92},
+      "M": {"chest": 108, "length": 96},
+      "L": {"chest": 116, "length": 100}
+    },
+    "garment_template_id": "coat_base.glb",
+    "image": "05_beige_coat.jpg",
+    "mock_image": "022_black_blazer_real.jpg",
+    "color": [210, 190, 155],
+    "label": "COAT"
+  },
+  {
+    "name": "灰色連帽外套",
+    "category": "outer",
+    "description": "刷毛連帽外套，用於帽T／外套公版。",
+    "size_chart": {
+      "S": {"chest": 104, "length": 66},
+      "M": {"chest": 112, "length": 68},
+      "L": {"chest": 120, "length": 70}
+    },
+    "garment_template_id": "hoodie_base.glb",
+    "image": "06_grey_hoodie.jpg",
+    "mock_image": "009_black_t-shirt.png",
+    "color": [128, 128, 132],
+    "label": "HOODIE"
+  },
+  {
+    "name": "玫瑰粉洋裝",
+    "category": "dress",
+    "description": "A 字短洋裝，用於連身類網格測試。",
+    "size_chart": {
+      "S": {"chest": 84, "waist": 68, "length": 88},
+      "M": {"chest": 90, "waist": 74, "length": 90},
+      "L": {"chest": 96, "waist": 80, "length": 92}
+    },
+    "garment_template_id": "dress_base.glb",
+    "image": "07_rose_dress.jpg",
+    "mock_image": "004_red_dress.png",
+    "color": [180, 80, 110],
+    "label": "DRESS"
+  },
+  {
+    "name": "橄欖綠 Polo 衫",
+    "category": "top",
+    "description": "短袖 Polo，用於領口與上衣特徵檢索。",
+    "size_chart": {
+      "S": {"chest": 90, "length": 67},
+      "M": {"chest": 98, "length": 69},
+      "L": {"chest": 106, "length": 71}
+    },
+    "garment_template_id": "polo_base.glb",
+    "image": "08_olive_polo.jpg",
+    "mock_image": "017_green_t-shirt.png",
+    "color": [85, 107, 47],
+    "label": "POLO"
+  },
+  {
+    "name": "奶油色針織毛衣",
+    "category": "top",
+    "description": "圓領針織毛衣，用於較厚上衣材質測試。",
+    "size_chart": {
+      "S": {"chest": 96, "length": 64},
+      "M": {"chest": 104, "length": 66},
+      "L": {"chest": 112, "length": 68}
+    },
+    "garment_template_id": "sweater_base.glb",
+    "image": "09_cream_sweater.jpg",
+    "mock_image": "016_white_dress.png",
+    "color": [245, 235, 215],
+    "label": "SWEATER"
+  },
+  {
+    "name": "炭灰慢跑褲",
+    "category": "bottom",
+    "description": "鬆緊腰慢跑褲，用於彈性下身公版。",
+    "size_chart": {
+      "S": {"waist": 70, "hip": 94, "length": 96},
+      "M": {"waist": 76, "hip": 100, "length": 98},
+      "L": {"waist": 82, "hip": 106, "length": 100}
+    },
+    "garment_template_id": "joggers_base.glb",
+    "image": "10_charcoal_joggers.jpg",
+    "mock_image": "006_blue_jeans.png",
+    "color": [55, 55, 58],
+    "label": "JOGGERS"
+  }
+]

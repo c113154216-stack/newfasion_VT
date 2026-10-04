@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>UV Prototype Viewer</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #222; }
+  #info { position: absolute; top: 8px; left: 8px; color: #fff; font-family: sans-serif; font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="info">載入中...</div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const info = document.getElementById("info");
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x222222);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 100);
+camera.position.set(0.8, 0.5, 1.2);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+dirLight.position.set(1, 2, 1);
+scene.add(dirLight);
+scene.add(new THREE.AxesHelper(0.3));
+
+const loader = new GLTFLoader();
+loader.load(
+  "uv_learning/step2_tshirt_uv_checker.glb",
+  (gltf) => {
+    scene.add(gltf.scene);
+    info.textContent = "載入成功: step2_tshirt_uv_checker.glb";
+  },
+  undefined,
+  (err) => {
+    info.textContent = "載入失敗: " + err.message;
+    console.error(err);
+  }
+);
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
