@@ -37,12 +37,23 @@ const pose = new PoseSource({
 });
 pose.start();
 
+// 同一顆按鈕切換開／關鏡頭
+let cameraOn = false;
 $("startCam").addEventListener("click", async () => {
   const btn = $("startCam");
-  btn.disabled = true;
-  const ok = await pose.startCamera();
-  btn.hidden = ok;
-  btn.disabled = false;
+  if (cameraOn) {
+    pose.stopCamera();
+    cameraOn = false;
+  } else {
+    btn.disabled = true;
+    btn.innerHTML = `<i class="ti ti-loader-2" aria-hidden="true"></i> 開啟中…`;
+    cameraOn = await pose.startCamera();
+    btn.disabled = false;
+  }
+  btn.classList.toggle("primary", !cameraOn);
+  btn.innerHTML = cameraOn
+    ? `<i class="ti ti-video-off" aria-hidden="true"></i> 關閉鏡頭`
+    : `<i class="ti ti-video" aria-hidden="true"></i> 開啟鏡頭`;
 });
 
 $("toggleSkeleton").addEventListener("click", (e) => {

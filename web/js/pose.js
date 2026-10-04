@@ -74,11 +74,27 @@ export class PoseSource {
       return true;
     } catch (err) {
       console.warn("[pose] 無法開啟鏡頭或載入模型，維持示範動作", err);
+      // 鏡頭開了但模型載入失敗時，也要把鏡頭關掉，不然指示燈會一直亮
+      this._releaseStream();
       this.mode = "demo";
       const denied = err && (err.name === "NotAllowedError" || err.name === "SecurityError");
       this.onStatus({ text: denied ? "鏡頭權限被拒，改用示範動作" : "鏡頭無法使用，改用示範動作", kind: "warn" });
       return false;
     }
+  }
+
+  stopCamera() {
+    this._releaseStream();
+    this.mode = "demo";
+    this.lastVideoTime = -1;
+    this.onStatus({ text: "示範動作", kind: "muted", live: false });
+  }
+
+  _releaseStream() {
+    const stream = this.video.srcObject;
+    if (stream) for (const track of stream.getTracks()) track.stop();
+    this.video.pause();
+    this.video.srcObject = null;
   }
 
   _loop(now) {
