@@ -60,11 +60,14 @@ export class PoseSource {
       if (!this.landmarker) {
         const { FilesetResolver, PoseLandmarker } = await import(`${MP_BASE}/vision_bundle.mjs`);
         const fileset = await FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
-        this.landmarker = await PoseLandmarker.createFromOptions(fileset, {
-          baseOptions: { modelAssetPath: MP_MODEL, delegate: "GPU" },
-          runningMode: "VIDEO",
-          numPoses: 1,
-        });
+        const create = (delegate) =>
+          PoseLandmarker.createFromOptions(fileset, {
+            baseOptions: { modelAssetPath: MP_MODEL, delegate },
+            runningMode: "VIDEO",
+            numPoses: 1,
+          });
+        // 有些電腦的 WebGL 不支援 GPU 推論，失敗就改用 CPU
+        this.landmarker = await create("GPU").catch(() => create("CPU"));
       }
       this.mode = "camera";
       this.onStatus({ text: "追蹤中", kind: "ok", live: true });
