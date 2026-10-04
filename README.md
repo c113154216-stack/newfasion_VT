@@ -21,7 +21,7 @@ python -m http.server 8765 --directory web
 | `web/js/main.js` | 狀態、畫面組裝、事件 |
 | `web/js/viewer.js` | Three.js 人偶與衣服（目前是簡化幾何，之後換 SMPL-X 與生成的衣服網格） |
 | `web/js/pose.js` | Webcam＋MediaPipe Pose；示範動作 |
-| `web/js/sizing.js` | 尺寸判定（計畫書表 2-1）與建議號碼 |
+| `web/js/sizing.js` | 尺寸推薦：判定（計畫書表 2-1）與建議號碼（林宇鑫負責） |
 | `web/js/mock-data.js` | 假資料 |
 
 ### 屬於其他組員、目前註解停用的功能
@@ -32,7 +32,6 @@ python -m http.server 8765 --directory web
 |---|---|---|---|
 | 開啟鏡頭、MediaPipe 偵測 | 趙丞章 | `pose.js` 的 `startCamera()` | 按「開啟鏡頭」顯示尚未接上，鏡頭區只跑示範骨架 |
 | 關鍵點 → 角度 | 趙丞章 | `pose.js` 的 `toAngles()` | 示範骨架不會帶動人偶 |
-| 尺寸判定、建議號碼 | 趙丞章 | `sizing.js`、`main.js` 的 `renderSize()` | 只列號碼與成衣尺寸，不給建議 |
 | 姿勢 → 人偶關節 | 紀泓宇 | `viewer.js` 的 `_applyPose()` | 人偶維持靜止站姿 |
 
 ## 目錄
