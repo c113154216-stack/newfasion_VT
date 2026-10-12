@@ -1,0 +1,19 @@
+# GarmentCode 環境（.venv）：打版、縫合、預覽圖、法線貼圖
+# 版本是 2026-10 在 Python 3.12 / Windows 上實際跑通的組合
+# 安裝：tools\setup\setup.ps1（或 .venv\Scripts\python -m pip install -r tools\chatgarment\requirements.txt）
+numpy==1.26.4          # GarmentCode 要 numpy < 2
+scipy==1.17.1
+PyYAML==6.0.3
+svgwrite==1.4.3
+psutil==7.2.2
+matplotlib==3.11.2
+svgpathtools==1.8.0
+cairosvg==2.9.1
+trimesh==5.1.1
+networkx==3.7
+shapely==2.1.2
+libigl==2.5.1          # 不能升級：2.6 起 facet_components 的回傳格式改了，GarmentCodeRC 會壞
+cgal==6.0.1.post202410241521
+rtree==1.4.1
+tqdm==4.70.1
+pillow==12.3.0

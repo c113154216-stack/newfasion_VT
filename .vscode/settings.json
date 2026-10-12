@@ -1,0 +1,8 @@
+{
+  // 檔案右上角的 ▶（Run Python File）預設用 GarmentCode 環境。
+  // infer.py 需要 ChatGarment 環境，它會自己偵測並自動切換，所以也可以直接按 ▶。
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+  "terminal.integrated.env.windows": { "PYTHONIOENCODING": "utf-8" },
+  "files.encoding": "utf8"
+}

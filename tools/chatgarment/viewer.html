@@ -1,0 +1,202 @@
+<!doctype html>
+<!--
+  縫合結果 3D 檢視：看 design_to_mesh.py、sew.py 產生的衣服網格。
+  要從 newfashion_VT 根目錄開伺服器（才讀得到 output/ 和 third_party/ 的檔案）：
+      python -m http.server 8766
+  再開 http://localhost:8766/tools/chatgarment/viewer.html
+-->
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>縫合結果檢視</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+  <style>
+    :root { --bg: #1b1d21; --panel: #26292f; --text: #e6e6e6; --muted: #9aa0a6; --accent: #4f8cff; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+                 font-family: "Microsoft JhengHei", system-ui, sans-serif; overflow: hidden; }
+    #view { position: fixed; inset: 0; }
+    #panel { position: fixed; top: 12px; left: 12px; background: var(--panel); padding: 12px 14px;
+             border-radius: 10px; display: grid; gap: 10px; min-width: 230px; max-width: calc(100vw - 48px); }
+    .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .label { color: var(--muted); font-size: 12px; }
+    button, select { background: #33373e; color: var(--text); border: 1px solid #444a52; border-radius: 6px;
+                     padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+    button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+    #info { font-size: 12px; color: var(--muted); line-height: 1.6; }
+    #status { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div id="view"></div>
+  <div id="panel">
+    <div>
+      <div class="label">衣服與身材</div>
+      <select id="case">
+        <optgroup label="同一款式、不同身材">
+          <option value="shirt_mean_male|mean_male">短袖 T 恤・男性平均</option>
+          <option value="shirt_mean_female|mean_female">短袖 T 恤・女性平均</option>
+          <option value="shirt_mean_male_bust+12|mean_male">短袖 T 恤・男性胸圍 +12</option>
+        </optgroup>
+        <optgroup label="同一身材（男性平均）、不同款式">
+          <option value="style_long_sleeve_fitted|mean_male">合身長袖上衣</option>
+          <option value="style_vneck_loose|mean_male">寬鬆 V 領短袖</option>
+          <option value="style_tank_top|mean_male">方領無袖背心</option>
+          <option value="style_oversize_long|mean_male">長版寬鬆 T 恤</option>
+          <option value="style_open_cardigan|mean_male">開襟長袖外套</option>
+          <option value="style_flare_blouse|mean_male">傘狀下襬短袖</option>
+        </optgroup>
+      </select>
+    </div>
+    <div>
+      <div class="label">階段</div>
+      <div class="row" id="stage">
+        <button data-stage="sewn" aria-pressed="true">縫合後</button>
+        <button data-stage="boxmesh" aria-pressed="false">縫合前</button>
+      </div>
+    </div>
+    <div>
+      <div class="label">顯示</div>
+      <div class="row">
+        <button id="tex" aria-pressed="true">布料貼圖</button>
+        <button id="wire" aria-pressed="false">網格線</button>
+        <button id="body" aria-pressed="true">身體</button>
+      </div>
+    </div>
+    <div id="info"></div>
+  </div>
+  <div id="status">載入中…</div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+
+    const ROOT = "../../";
+    const $ = (id) => document.getElementById(id);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(devicePixelRatio);
+    $("view").appendChild(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1b1d21);
+    const camera = new THREE.PerspectiveCamera(35, 1, 1, 2000);
+    camera.position.set(0, 125, 230);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 120, 0);
+    controls.enableDamping = true;
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x444455, 1.6));
+    const key = new THREE.DirectionalLight(0xffffff, 1.6);
+    key.position.set(80, 200, 150);
+    scene.add(key);
+    const back = new THREE.DirectionalLight(0xffffff, 0.8);
+    back.position.set(-80, 150, -150);
+    scene.add(back);
+    const grid = new THREE.GridHelper(200, 20, 0x3a3f47, 0x2c3036);
+    scene.add(grid);
+
+    const loader = new OBJLoader();
+    const texLoader = new THREE.TextureLoader();
+    const state = { stage: "sewn", tex: true, wire: false, body: true };
+    let bodyMesh = null, garmentMesh = null, garmentTex = null;
+    const plainMat = new THREE.MeshStandardMaterial({ color: 0x5b8def, roughness: 0.85, side: THREE.DoubleSide });
+    const wireMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.25 });
+
+    function firstMesh(obj) {
+      let mesh = null;
+      obj.traverse((o) => { if (o.isMesh && !mesh) mesh = o; });
+      return mesh;
+    }
+
+    async function loadObj(url) {
+      const obj = await loader.loadAsync(url);
+      const mesh = firstMesh(obj);
+      mesh.geometry.computeVertexNormals();
+      return mesh;
+    }
+
+    function applyGarmentMaterial() {
+      if (!garmentMesh) return;
+      const mat = state.tex && garmentTex
+        ? new THREE.MeshStandardMaterial({ map: garmentTex, roughness: 0.9, side: THREE.DoubleSide })
+        : plainMat;
+      garmentMesh.material = mat;
+      garmentMesh.children.forEach((c) => (c.visible = state.wire));
+    }
+
+    async function load() {
+      const [name, bodyName] = $("case").value.split("|");
+      const folder = `${ROOT}output/chatgarment/${name}/`;
+      $("status").textContent = "載入中…";
+      try {
+        const [body, garment, tex] = await Promise.all([
+          loadObj(`${ROOT}third_party/GarmentCodeRC/assets/bodies/${bodyName}.obj`),
+          loadObj(`${folder}${name}_${state.stage}.obj`),
+          texLoader.loadAsync(`${folder}${name}_texture_fabric.png`).catch(() => null),
+        ]);
+        if (bodyMesh) scene.remove(bodyMesh);
+        if (garmentMesh) scene.remove(garmentMesh);
+
+        body.scale.setScalar(100); // 身體網格單位是公尺，衣服是公分
+        body.material = new THREE.MeshStandardMaterial({ color: 0xc9a88a, roughness: 0.7 });
+        body.visible = state.body;
+        bodyMesh = body;
+        scene.add(body);
+
+        garmentTex = tex;
+        if (tex) { tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = true; }
+        garment.add(new THREE.Mesh(garment.geometry, wireMat));
+        garmentMesh = garment;
+        applyGarmentMaterial();
+        scene.add(garment);
+
+        const g = garment.geometry;
+        $("info").innerHTML =
+          `三角面 ${(g.attributes.position.count / 3).toLocaleString()}<br>` +
+          `拖曳旋轉、滾輪縮放、右鍵平移`;
+        $("status").textContent = "";
+      } catch (err) {
+        $("status").textContent = `載入失敗：${err.message}（要先跑 design_to_mesh.py／style_examples.py 和 sew.py）`;
+      }
+    }
+
+    function toggle(btn, key, after) {
+      btn.addEventListener("click", () => {
+        state[key] = !state[key];
+        btn.setAttribute("aria-pressed", state[key]);
+        after();
+      });
+    }
+
+    $("case").addEventListener("change", load);
+    $("stage").addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      state.stage = btn.dataset.stage;
+      $("stage").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b === btn));
+      load();
+    });
+    toggle($("tex"), "tex", applyGarmentMaterial);
+    toggle($("wire"), "wire", applyGarmentMaterial);
+    toggle($("body"), "body", () => bodyMesh && (bodyMesh.visible = state.body));
+
+    function resize() {
+      renderer.setSize(innerWidth, innerHeight);
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+    }
+    addEventListener("resize", resize);
+    resize();
+    renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+    load();
+  </script>
+</body>
+</html>

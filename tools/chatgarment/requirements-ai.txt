@@ -1,0 +1,21 @@
+# ChatGarment 環境（.venv-chatgarment）：AI 推論（infer.py）、SMPL-X 人體
+# 和 .venv 分開：transformers 4.37.2 需要的套件版本會和 GarmentCode 那邊衝突
+# 安裝：tools\setup\setup.ps1
+#
+# PyTorch 要用 CUDA 12.8 的版本（RTX 50 系列需要），所以從 PyTorch 的套件庫下載
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+
+transformers==4.37.2   # 不能升級：ChatGarment 的模型程式依賴這個版本的內部寫法
+tokenizers==0.15.1
+sentencepiece==0.2.2
+accelerate==1.15.0
+bitsandbytes==0.50.2   # 4-bit 量化（NF4）
+safetensors==0.8.0
+huggingface_hub==0.36.2
+protobuf==7.36.2
+pillow==12.3.0
+numpy==2.5.2
+easydict==1.13
+smplx==0.1.28          # SMPL-X 人體（26 個身體欄位量測要用）

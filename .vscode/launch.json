@@ -1,0 +1,102 @@
+{
+  // 「執行與偵錯」面板（Ctrl+Shift+D）的下拉選單：選一項 → 按綠色 ▶
+  // 每一項已經指定好要用哪個 Python 環境和參數，不用在終端機打指令
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "0 檢查環境",
+      "type": "debugpy", "request": "launch",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "program": "${workspaceFolder}/tools/setup/check_env.py",
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal", "justMyCode": true,
+      "env": { "PYTHONIOENCODING": "utf-8" },
+      "presentation": { "group": "1 準備", "order": 1 }
+    },
+    {
+      "name": "① AI 判斷款式（自動選：顯示卡 ≥ 20 GB 用原版 bf16，否則 4-bit）",
+      "type": "debugpy", "request": "launch",
+      "python": "${workspaceFolder}/.venv-chatgarment/Scripts/python.exe",
+      "program": "${workspaceFolder}/tools/chatgarment/infer.py",
+      "args": ["--mode", "auto"],
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal", "justMyCode": true,
+      "env": { "PYTHONIOENCODING": "utf-8", "PYTHONWARNINGS": "ignore" },
+      "presentation": { "group": "2 衣服生成", "order": 1 }
+    },
+    {
+      "name": "② 生成網格並縫合（自動接最近一次 ① 的結果）",
+      "type": "debugpy", "request": "launch",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "program": "${workspaceFolder}/tools/chatgarment/to_design.py",
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal", "justMyCode": true,
+      "env": { "PYTHONIOENCODING": "utf-8", "PYTHONWARNINGS": "ignore" },
+      "presentation": { "group": "2 衣服生成", "order": 2 }
+    },
+    {
+      "name": "③ 輸出給物理（T-pose、公尺）",
+      "type": "debugpy", "request": "launch",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "program": "${workspaceFolder}/tools/chatgarment/export_for_physics.py",
+      "args": ["--design", "output/chatgarment_ai/${input:inferMode}/${input:garmentName}/design_upper.yaml", "--name", "${input:garmentName}"],
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal", "justMyCode": true,
+      "env": { "PYTHONIOENCODING": "utf-8", "PYTHONWARNINGS": "ignore" },
+      "presentation": { "group": "2 衣服生成", "order": 3 }
+    },
+    {
+      "name": "總覽圖（AI 的結果，選 4bit 或 bf16）",
+      "type": "debugpy", "request": "launch",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "program": "${workspaceFolder}/tools/chatgarment/gallery.py",
+      "args": ["ai${input:inferMode}"],
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal", "justMyCode": true,
+      "env": { "PYTHONIOENCODING": "utf-8", "PYTHONWARNINGS": "ignore" },
+      "presentation": { "group": "3 看結果", "order": 1 }
+    },
+    {
+      "name": "3D 檢視頁（開 http://localhost:8766/tools/chatgarment/viewer.html）",
+      "type": "debugpy", "request": "launch",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "module": "http.server", "args": ["8766"],
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal",
+      "presentation": { "group": "3 看結果", "order": 2 }
+    },
+    {
+      "name": "試穿網站（開 http://localhost:8765）",
+      "type": "debugpy", "request": "launch",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "module": "http.server", "args": ["8765", "--directory", "web"],
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal",
+      "presentation": { "group": "3 看結果", "order": 3 }
+    },
+    {
+      "name": "法線貼圖（輸入照片路徑）",
+      "type": "debugpy", "request": "launch",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "program": "${workspaceFolder}/tools/texture/normal_map.py",
+      "args": ["${input:imagePath}"],
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal", "justMyCode": true,
+      "env": { "PYTHONIOENCODING": "utf-8" },
+      "presentation": { "group": "4 其他", "order": 1 }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "inferMode",
+      "type": "pickString",
+      "description": "要用哪一次推論的結果",
+      "options": ["4bit", "bf16"],
+      "default": "4bit"
+    },
+    {
+      "id": "garmentName",
+      "type": "promptString",
+      "description": "衣服名稱（output/chatgarment_ai/4bit 底下的資料夾名，例如 e01_red_tee）",
+      "default": "e01_red_tee"
+    },
+    {
+      "id": "imagePath",
+      "type": "promptString",
+      "description": "照片路徑",
+      "default": "output/chatgarment_ai/inputs/e19_wine_sweater.jpg"
+    }
+  ]
+}
