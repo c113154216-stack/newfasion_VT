@@ -1,2 +1,2 @@
-# bash 腳本必須是 LF 換行，否則在 Windows 上 checkout 後會因為  而執行失敗
+# bash 腳本必須是 LF 換行：在 Windows 上被轉成 CRLF 的話，bash 會執行失敗
 *.sh text eol=lf
