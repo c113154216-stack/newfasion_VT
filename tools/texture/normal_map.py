@@ -6,6 +6,7 @@
   1. 照片轉灰階，假設「亮＝凸、暗＝凹」當作表面高度
   2. 減掉大範圍的光影，只留細小的紋理（針織、絨毛…）
   3. 由高度的斜率算出每個點的表面方向，存成法線貼圖（xyz → RGB）
+存檔用 OpenGL 慣例（綠色＝y 朝上），和 Three.js 的 normalMap 預設、DeepBump 一致。
 限制：顏色本身有深淺的布（例如黑白條紋）會被誤判成凹凸；照片裡的皺褶也會被當成紋理。
 
 跑法（在 newfashion_VT 根目錄）：
@@ -34,7 +35,7 @@ OUT = Path(__file__).resolve().parents[2] / "output" / "texture_demo"
 
 
 def estimate_normal(rgb, strength=6.0, detail_sigma=12.0, smooth=0.8):
-    """rgb：0～1 的影像。回傳每個點的單位法線（H×W×3）。"""
+    """rgb：0～1 的影像。回傳每個點的單位法線（H×W×3），影像座標（y 朝下）。"""
     gray = rgb @ np.array([0.299, 0.587, 0.114])
     height = gray - ndimage.gaussian_filter(gray, detail_sigma)  # 去掉大範圍光影
     height = ndimage.gaussian_filter(height, smooth)             # 去掉雜訊
@@ -68,7 +69,8 @@ def main():
     rgb = np.asarray(crop).astype(np.float32) / 255
 
     normal = estimate_normal(rgb, args.strength)
-    normal_rgb = (normal + 1) / 2  # 法線貼圖的標準存法
+    opengl = normal * np.array([1, -1, 1])  # 影像 y 朝下 → OpenGL y 朝上（Three.js 預設）
+    normal_rgb = (opengl + 1) / 2  # 法線貼圖的標準存法：−1～1 → 0～1
 
     OUT.mkdir(parents=True, exist_ok=True)
     name = Path(args.image).stem

@@ -1,0 +1,283 @@
+<!doctype html>
+<!--
+  衣服網格檢視：自動列出 output/chatgarment 與 output/physics_export 底下所有衣服，純灰色、可看網格線。
+  要從 newfashion_VT 根目錄開伺服器（列資料夾靠 python http.server 的目錄清單）：
+      python -m http.server 8766
+  再開 http://localhost:8766/tools/chatgarment/mesh_viewer.html
+  （VS Code：執行選單的「網格檢視網站」）
+-->
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>衣服網格檢視</title>
+  <script type="importmap">
+    { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    } }
+  </script>
+  <style>
+    :root { --bg: #1b1d21; --panel: #26292f; --line: #3a3f47; --text: #e6e6e6; --muted: #9aa0a6; --accent: #4f8cff; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+                 font-family: "Microsoft JhengHei", system-ui, sans-serif; overflow: hidden; }
+    #view { position: fixed; inset: 0 0 0 300px; }
+    #side { position: fixed; top: 0; left: 0; bottom: 0; width: 300px; background: var(--panel);
+            border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+    #controls { padding: 14px; display: grid; gap: 12px; border-bottom: 1px solid var(--line); }
+    .label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .row { display: flex; flex-wrap: wrap; gap: 6px; }
+    button { background: #33373e; color: var(--text); border: 1px solid #444a52; border-radius: 6px;
+             padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+    button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+    #search { width: 100%; box-sizing: border-box; background: #1f2227; color: var(--text);
+              border: 1px solid #444a52; border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; }
+    #list { overflow-y: auto; flex: 1; padding: 6px 0 12px; }
+    .group { color: var(--muted); font-size: 12px; padding: 10px 14px 4px; }
+    .item { display: block; width: 100%; text-align: left; border: none; border-radius: 0; background: none;
+            padding: 6px 14px 6px 22px; font-size: 13px; color: var(--text); }
+    .item:hover { background: #30343b; }
+    .item[aria-pressed="true"] { background: #2d3f5e; color: #fff; }
+    #info { position: fixed; left: 312px; bottom: 12px; font-size: 13px; color: var(--muted);
+            background: rgba(38, 41, 47, 0.85); padding: 8px 12px; border-radius: 8px; line-height: 1.6; }
+    @media (max-width: 700px) {
+      #side { width: 100%; height: 45%; bottom: auto; border-right: none; border-bottom: 1px solid var(--line); }
+      #view { inset: 45% 0 0 0; }
+      #info { left: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="side">
+    <div id="controls">
+      <div>
+        <div class="label">階段</div>
+        <div class="row" id="stage">
+          <button data-stage="sewn" aria-pressed="true">縫合後</button>
+          <button data-stage="boxmesh" aria-pressed="false">縫合前</button>
+        </div>
+      </div>
+      <div>
+        <div class="label">顯示</div>
+        <div class="row">
+          <button id="wire" aria-pressed="true">網格線</button>
+          <button id="body" aria-pressed="true">身體</button>
+          <button id="flat" aria-pressed="false">平面著色</button>
+        </div>
+      </div>
+      <input id="search" placeholder="搜尋衣服名稱…">
+    </div>
+    <div id="list"><div class="group">讀取中…</div></div>
+  </div>
+  <div id="view"></div>
+  <div id="info">拖曳旋轉、滾輪縮放、右鍵平移</div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+
+    const ROOT = "../../";
+    const $ = (id) => document.getElementById(id);
+
+    // ---------- 場景 ----------
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(devicePixelRatio);
+    $("view").appendChild(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1b1d21);
+    const camera = new THREE.PerspectiveCamera(35, 1, 1, 3000);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x444455, 1.5));
+    const key = new THREE.DirectionalLight(0xffffff, 1.7); key.position.set(80, 200, 150); scene.add(key);
+    const back = new THREE.DirectionalLight(0xffffff, 0.8); back.position.set(-80, 150, -150); scene.add(back);
+    scene.add(new THREE.GridHelper(300, 30, 0x3a3f47, 0x2c3036));
+
+    const garmentMat = new THREE.MeshStandardMaterial({ color: 0xb8c4d6, roughness: 0.75, side: THREE.DoubleSide,
+                                                        polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+    const wireMat = new THREE.MeshBasicMaterial({ color: 0x1d2b3a, wireframe: true, transparent: true, opacity: 0.55 });
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xc9a88a, roughness: 0.7 });
+    const loader = new OBJLoader();
+    const state = { stage: "sewn", wire: true, body: true, flat: false, current: null };
+    let garment = null, wire = null, body = null, loadId = 0;
+
+    // ---------- 平滑著色：同一位置的三角形法線平均（OBJLoader 讀進來頂點是分開的）----------
+    function smoothNormals(geometry) {
+      const pos = geometry.attributes.position;
+      const key = (i) => `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
+      const sums = new Map();
+      const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i += 3) {
+        a.fromBufferAttribute(pos, i); b.fromBufferAttribute(pos, i + 1); c.fromBufferAttribute(pos, i + 2);
+        const n = b.clone().sub(a).cross(c.clone().sub(a));
+        for (let k = 0; k < 3; k++) {
+          const id = key(i + k);
+          sums.set(id, (sums.get(id) || new THREE.Vector3()).add(n));
+        }
+      }
+      const normals = new Float32Array(pos.count * 3);
+      for (let i = 0; i < pos.count; i++) normals.set(sums.get(key(i)).clone().normalize().toArray(), i * 3);
+      geometry.setAttribute("smoothNormal", new THREE.BufferAttribute(normals, 3));
+      geometry.setAttribute("flatNormal", geometry.attributes.normal.clone());
+      return sums.size;  // 實際頂點數（同位置算一個）
+    }
+
+    function applyShading(geometry) {
+      geometry.setAttribute("normal", geometry.attributes[state.flat ? "flatNormal" : "smoothNormal"]);
+    }
+
+    async function loadMesh(url, scale) {
+      const obj = await loader.loadAsync(url);
+      let mesh = null;
+      obj.traverse((o) => { if (o.isMesh && !mesh) mesh = o; });
+      mesh.geometry.computeVertexNormals();
+      mesh.geometry.scale(scale, scale, scale);
+      mesh.geometry.computeVertexNormals();
+      return mesh;
+    }
+
+    // ---------- 列出所有衣服（讀 http.server 的目錄清單）----------
+    async function listDir(path) {
+      const res = await fetch(ROOT + path);
+      if (!res.ok) return [];
+      const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+      return [...doc.querySelectorAll("a")].map((a) => decodeURIComponent(a.getAttribute("href")))
+        .filter((h) => h.endsWith("/") && !h.startsWith("_") && !h.startsWith(".")).map((h) => h.slice(0, -1));
+    }
+
+    function groupOf(name, source) {
+      if (source === "physics") return "給物理模擬（T-pose、公尺）";
+      if (/^ai4bit_/.test(name)) return "AI 判斷（4-bit）";
+      if (/^aibf16_/.test(name)) return "AI 判斷（原版 bf16）";
+      if (/^style_/.test(name)) return "手動款式範例";
+      if (/^shirt_/.test(name)) return "同款式、不同身材";
+      if (/_r[\d.]+$/.test(name)) return "T-pose（輸出給物理前的版本）";
+      return "其他";
+    }
+
+    async function buildList() {
+      const items = [
+        ...(await listDir("output/chatgarment/")).map((n) => ({ name: n, source: "chatgarment" })),
+        ...(await listDir("output/physics_export/")).map((n) => ({ name: n, source: "physics" })),
+      ].filter((it) => it.name !== "bodies");
+      const groups = new Map();
+      for (const it of items) {
+        const g = groupOf(it.name, it.source);
+        if (!groups.has(g)) groups.set(g, []);
+        groups.get(g).push(it);
+      }
+      const list = $("list");
+      list.innerHTML = items.length ? "" : '<div class="group">找不到衣服：要先跑 ① ② 或 ③</div>';
+      for (const [g, its] of groups) {
+        const head = document.createElement("div");
+        head.className = "group"; head.textContent = `${g}（${its.length}）`;
+        list.appendChild(head);
+        for (const it of its) {
+          const btn = document.createElement("button");
+          btn.className = "item"; btn.textContent = it.name; btn.dataset.name = it.name; btn.dataset.source = it.source;
+          btn.setAttribute("aria-pressed", "false");
+          btn.addEventListener("click", () => select(it, btn));
+          list.appendChild(btn);
+        }
+      }
+      const first = list.querySelector(".item");
+      if (first) first.click();
+    }
+
+    // ---------- 依衣服決定身體與檔名 ----------
+    async function bodyFor(it) {
+      if (it.source === "physics") return { url: `${ROOT}output/physics_export/_bodies/tpose_smpl_female.obj` };
+      // 打版用的身體尺寸存在 body_measurements.yaml（沒有前綴的那個），看手臂角度判斷 T-pose
+      const res = await fetch(`${ROOT}output/chatgarment/${it.name}/body_measurements.yaml`);
+      const text = res.ok ? await res.text() : "";
+      const arm = parseFloat((text.match(/arm_pose_angle:\s*([-\d.]+)/) || [])[1]);
+      if (arm === 0) return { url: `${ROOT}output/physics_export/_bodies/tpose_smpl_female.obj` };
+      const bodyName = /female/.test(it.name) ? "mean_female" : "mean_male";
+      return { url: `${ROOT}third_party/GarmentCodeRC/assets/bodies/${bodyName}.obj` };
+    }
+
+    function garmentUrl(it) {
+      if (it.source === "physics") return { url: `${ROOT}output/physics_export/${it.name}/${it.name}.obj`, scale: 100 };
+      return { url: `${ROOT}output/chatgarment/${it.name}/${it.name}_${state.stage}.obj`, scale: 1 };
+    }
+
+    async function load(it) {
+      const id = ++loadId;
+      $("info").textContent = "載入中…";
+      try {
+        const g = garmentUrl(it);
+        const [bodyInfo, gm] = await Promise.all([bodyFor(it), loadMesh(g.url, g.scale)]);
+        const bm = await loadMesh(bodyInfo.url, 100);  // 身體網格單位是公尺
+        if (id !== loadId) return;  // 使用者已經點了別件
+        [garment, wire, body].forEach((m) => m && scene.remove(m));
+
+        const nVerts = smoothNormals(gm.geometry);
+        applyShading(gm.geometry);
+        gm.material = garmentMat;
+        wire = new THREE.Mesh(gm.geometry, wireMat);
+        wire.visible = state.wire;
+        bm.material = bodyMat;
+        bm.visible = state.body;
+        garment = gm; body = bm;
+        scene.add(bm, gm, wire);
+
+        // 鏡頭對準衣服
+        const box = new THREE.Box3().setFromObject(gm);
+        const center = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+        controls.target.copy(center);
+        camera.position.set(center.x, center.y + size.y * 0.15, center.z + Math.max(size.x, size.y) * 2.2);
+        controls.update();
+
+        const tris = gm.geometry.attributes.position.count / 3;
+        const stageText = it.source === "physics" ? "輸出給物理的版本（縫合後）" : (state.stage === "sewn" ? "縫合後" : "縫合前");
+        $("info").innerHTML = `<b>${it.name}</b>・${stageText}<br>頂點 ${nVerts.toLocaleString()}・三角形 ${tris.toLocaleString()}`
+          + `・寬 ${size.x.toFixed(0)} × 高 ${size.y.toFixed(0)} cm<br>拖曳旋轉、滾輪縮放、右鍵平移`;
+      } catch (err) {
+        if (id === loadId) $("info").textContent = `載入失敗：${err.message}`;
+      }
+    }
+
+    function select(it, btn) {
+      state.current = it;
+      $("list").querySelectorAll(".item").forEach((b) => b.setAttribute("aria-pressed", b === btn));
+      $("stage").querySelectorAll("button").forEach((b) => (b.disabled = it.source === "physics"));
+      load(it);
+    }
+
+    // ---------- 控制 ----------
+    $("stage").addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn || btn.disabled) return;
+      state.stage = btn.dataset.stage;
+      $("stage").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b === btn));
+      if (state.current) load(state.current);
+    });
+    function toggle(id, key, after) {
+      $(id).addEventListener("click", () => {
+        state[key] = !state[key];
+        $(id).setAttribute("aria-pressed", state[key]);
+        after();
+      });
+    }
+    toggle("wire", "wire", () => wire && (wire.visible = state.wire));
+    toggle("body", "body", () => body && (body.visible = state.body));
+    toggle("flat", "flat", () => garment && applyShading(garment.geometry));
+    $("search").addEventListener("input", () => {
+      const q = $("search").value.trim().toLowerCase();
+      $("list").querySelectorAll(".item").forEach((b) => (b.style.display = b.dataset.name.toLowerCase().includes(q) ? "" : "none"));
+    });
+
+    function resize() {
+      const r = $("view").getBoundingClientRect();
+      renderer.setSize(r.width, r.height);
+      camera.aspect = r.width / r.height;
+      camera.updateProjectionMatrix();
+    }
+    addEventListener("resize", resize);
+    resize();
+    renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+    buildList();
+  </script>
+</body>
+</html>

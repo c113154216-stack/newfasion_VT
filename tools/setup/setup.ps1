@@ -1,7 +1,7 @@
 ﻿# 衣物生成環境一鍵安裝（對應第四週週報「所需工具」）
 #
 # 會做的事（已經有的會跳過，可以重複執行）：
-#   1. 抓 ChatGarment、GarmentCodeRC 原始碼到 third_party/（固定在測試過的版本）
+#   1. 抓 ChatGarment、GarmentCodeRC、DeepBump 原始碼到 third_party/（固定在測試過的版本）
 #   2. 在 ChatGarment 建 assets 連結，指向 GarmentCodeRC/assets（作者 README 的步驟 6）
 #   3. 建 .venv（GarmentCode 環境）並安裝 tools/chatgarment/requirements.txt
 #   4. 建 .venv-chatgarment（ChatGarment 環境，PyTorch CUDA 12.8）並安裝 requirements-ai.txt
@@ -32,7 +32,9 @@ Write-Host "Python：$Py ($ver)"
 Step "1. 第三方原始碼（third_party/）"
 $Repos = @(
     @{ Name = "ChatGarment";   Url = "https://github.com/biansy000/ChatGarment";   Commit = "798c34ac04319668aaa0e3a3a02d44284fbd70ec" },
-    @{ Name = "GarmentCodeRC"; Url = "https://github.com/biansy000/GarmentCodeRC"; Commit = "e3d4476d6f9bcb0af5ee0eccd18b0433e3df398a" }
+    @{ Name = "GarmentCodeRC"; Url = "https://github.com/biansy000/GarmentCodeRC"; Commit = "e3d4476d6f9bcb0af5ee0eccd18b0433e3df398a" },
+    # 法線貼圖比較用（GPL-3：只當外部工具呼叫，不併進專案程式碼）
+    @{ Name = "DeepBump";      Url = "https://github.com/HugoTini/DeepBump";      Commit = "fad19ba87daed12b1d0410a57e74f3d79e82f78d" }
 )
 New-Item -ItemType Directory -Force "third_party" | Out-Null
 foreach ($r in $Repos) {

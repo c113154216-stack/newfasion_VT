@@ -42,6 +42,26 @@
       "presentation": { "group": "2 衣服生成", "order": 3 }
     },
     {
+      "name": "④ 顏色貼圖：照片正面貼到衣服上（輸入衣服資料夾名稱）",
+      "type": "debugpy", "request": "launch",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "program": "${workspaceFolder}/tools/texture/bake_front.py",
+      "args": ["--mesh", "${input:meshName}"],
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal", "justMyCode": true,
+      "env": { "PYTHONIOENCODING": "utf-8", "PYTHONWARNINGS": "ignore" },
+      "presentation": { "group": "2 衣服生成", "order": 4 }
+    },
+    {
+      "name": "⑤ 打包衣服網格給隊友（輸入 ③ 的輸出名稱）",
+      "type": "debugpy", "request": "launch",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "program": "${workspaceFolder}/tools/chatgarment/pack_for_team.py",
+      "args": ["${input:meshName}"],
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal", "justMyCode": true,
+      "env": { "PYTHONIOENCODING": "utf-8", "PYTHONWARNINGS": "ignore" },
+      "presentation": { "group": "2 衣服生成", "order": 5 }
+    },
+    {
       "name": "總覽圖（AI 的結果，選 4bit 或 bf16）",
       "type": "debugpy", "request": "launch",
       "python": "${workspaceFolder}/.venv/Scripts/python.exe",
@@ -53,6 +73,14 @@
     },
     {
       "name": "3D 檢視頁（開 http://localhost:8766/tools/chatgarment/viewer.html）",
+      "type": "debugpy", "request": "launch",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "module": "http.server", "args": ["8766"],
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal",
+      "presentation": { "group": "3 看結果", "order": 2 }
+    },
+    {
+      "name": "網格檢視網站（開 http://localhost:8766/tools/chatgarment/mesh_viewer.html）",
       "type": "debugpy", "request": "launch",
       "python": "${workspaceFolder}/.venv/Scripts/python.exe",
       "module": "http.server", "args": ["8766"],
@@ -76,9 +104,25 @@
       "cwd": "${workspaceFolder}", "console": "integratedTerminal", "justMyCode": true,
       "env": { "PYTHONIOENCODING": "utf-8" },
       "presentation": { "group": "4 其他", "order": 1 }
+    },
+    {
+      "name": "法線貼圖：我們的做法 vs DeepBump（輸入照片路徑）",
+      "type": "debugpy", "request": "launch",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "program": "${workspaceFolder}/tools/texture/compare_deepbump.py",
+      "args": ["${input:imagePath}"],
+      "cwd": "${workspaceFolder}", "console": "integratedTerminal", "justMyCode": true,
+      "env": { "PYTHONIOENCODING": "utf-8" },
+      "presentation": { "group": "4 其他", "order": 2 }
     }
   ],
   "inputs": [
+    {
+      "id": "meshName",
+      "type": "promptString",
+      "description": "output/chatgarment 底下的衣服資料夾（T-pose 版是 ③ 產生的 <名稱>_r2），照片會依名稱自動找",
+      "default": "e01_red_tee_r2"
+    },
     {
       "id": "inferMode",
       "type": "pickString",

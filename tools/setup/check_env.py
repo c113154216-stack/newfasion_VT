@@ -26,6 +26,10 @@ from importlib.metadata import version
 assert version('libigl') == '2.5.1', '要用 libigl 2.5.1，目前是 ' + version('libigl')
 print('numpy', numpy.__version__, '・libigl', version('libigl'), '・trimesh', trimesh.__version__)
 """),
+    ("DeepBump 執行環境（onnxruntime）", VENV, """
+import onnxruntime, imageio
+print('onnxruntime', onnxruntime.__version__)
+"""),
     ("GarmentCode 能打版", VENV, """
 import os, sys
 os.chdir(r'{gc}'); sys.path.insert(0, r'{gc}')
@@ -64,6 +68,7 @@ FILES = [
     ("ChatGarment 原始碼", REPO / "third_party/ChatGarment/llava"),
     ("GarmentCodeRC 原始碼", REPO / "third_party/GarmentCodeRC/pygarment"),
     ("assets 連結", REPO / "third_party/ChatGarment/assets/bodies"),
+    ("DeepBump 模型", REPO / "third_party/DeepBump/deepbump256.onnx"),
     ("ChatGarment 權重",
      REPO / "third_party/ChatGarment/checkpoints/try_7b_lr1e_4_v3_garmentcontrol_4h100_v4_final/pytorch_model.bin"),
     ("SMPL-X 權重", REPO / "legacy/geometry_physics/assets/smplx/SMPLX_NEUTRAL.npz"),

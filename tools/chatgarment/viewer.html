@@ -53,6 +53,9 @@
           <option value="style_open_cardigan|mean_male">開襟長袖外套</option>
           <option value="style_flare_blouse|mean_male">傘狀下襬短袖</option>
         </optgroup>
+        <optgroup label="貼上照片顏色（T-pose）">
+          <option value="e01_red_tee_r2|tpose|bake">紅領白 T 恤（正面貼照片，背面主色）</option>
+        </optgroup>
       </select>
     </div>
     <div>
@@ -116,10 +119,34 @@
       return mesh;
     }
 
+    // 平滑著色：OBJLoader 讀進來每個三角形的頂點是分開的，直接 computeVertexNormals 會變成
+    // 每個面一個方向（看起來一塊塊三角形）。改成「同一個位置」的所有三角形法線加總再平均，
+    // 縫線兩側 UV 不同但位置相同的點也會一起平均，接縫不會出現折線。
+    function smoothNormals(geometry) {
+      const pos = geometry.attributes.position;
+      const key = (i) => `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
+      const sums = new Map();
+      const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i += 3) {
+        a.fromBufferAttribute(pos, i); b.fromBufferAttribute(pos, i + 1); c.fromBufferAttribute(pos, i + 2);
+        const n = b.clone().sub(a).cross(c.clone().sub(a));  // 長度＝面積×2，大的三角形影響大
+        for (let k = 0; k < 3; k++) {
+          const id = key(i + k);
+          sums.set(id, (sums.get(id) || new THREE.Vector3()).add(n));
+        }
+      }
+      const normals = new Float32Array(pos.count * 3);
+      for (let i = 0; i < pos.count; i++) {
+        const n = sums.get(key(i)).clone().normalize();
+        normals.set([n.x, n.y, n.z], i * 3);
+      }
+      geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+    }
+
     async function loadObj(url) {
       const obj = await loader.loadAsync(url);
       const mesh = firstMesh(obj);
-      mesh.geometry.computeVertexNormals();
+      smoothNormals(mesh.geometry);
       return mesh;
     }
 
@@ -133,14 +160,18 @@
     }
 
     async function load() {
-      const [name, bodyName] = $("case").value.split("|");
-      const folder = `${ROOT}output/chatgarment/${name}/`;
+      const [name, bodyName, mode] = $("case").value.split("|");
+      const baked = mode === "bake";  // bake_front.py 的結果：output/texture_bake/<名稱>/
+      const folder = baked ? `${ROOT}output/texture_bake/${name}/` : `${ROOT}output/chatgarment/${name}/`;
+      const bodyUrl = bodyName === "tpose"
+        ? `${ROOT}output/physics_export/_bodies/tpose_smpl_female.obj`
+        : `${ROOT}third_party/GarmentCodeRC/assets/bodies/${bodyName}.obj`;
       $("status").textContent = "載入中…";
       try {
         const [body, garment, tex] = await Promise.all([
-          loadObj(`${ROOT}third_party/GarmentCodeRC/assets/bodies/${bodyName}.obj`),
-          loadObj(`${folder}${name}_${state.stage}.obj`),
-          texLoader.loadAsync(`${folder}${name}_texture_fabric.png`).catch(() => null),
+          loadObj(bodyUrl),
+          loadObj(baked ? `${folder}${name}.obj` : `${folder}${name}_${state.stage}.obj`),
+          texLoader.loadAsync(baked ? `${folder}texture.png` : `${folder}${name}_texture_fabric.png`).catch(() => null),
         ]);
         if (bodyMesh) scene.remove(bodyMesh);
         if (garmentMesh) scene.remove(garmentMesh);
