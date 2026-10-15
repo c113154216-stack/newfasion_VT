@@ -1,0 +1,16 @@
+{
+  // 「終端機 → 執行工作」（Terminal → Run Task）的選單
+  // 安裝環境要在 Python 環境建好之前執行，所以不能放在「執行與偵錯」（launch.json），放這裡
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "安裝環境（第一次用、或換電腦時執行一次）",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}\\tools\\setup\\setup.ps1"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": []
+    }
+  ]
+}

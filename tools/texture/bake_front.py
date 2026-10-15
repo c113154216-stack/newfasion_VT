@@ -3,10 +3,10 @@
 顏色貼圖第 1 步：把平拍商品照的「正面」貼到生成衣服的前片與袖子正面上。
 
 流程：
-  1. 去背：用照片邊緣的顏色當背景，切出衣服的範圍（灰／白等單純背景適用）
-  2. 平放：取衣服網格中前片、袖子正面的三角形，從正面投影成 2D 形狀（像平拍照）
-  3. 對齊：先對齊兩個形狀的外框，再沿輪廓等距取對應點，用薄板樣條（thin-plate spline）
-     把網格彎過去貼合照片，得到每個頂點在照片上的位置
+  1. 去背：GrabCut，照片外圈當背景，切出衣服的範圍
+  2. 平放：衣服網格（T-pose）所有版片從正面投影成 2D 輪廓（像平拍照）
+  3. 對齊：兩邊輪廓各找特徵點（領口、袖口、下襬兩角、腋下），特徵點之間等距取對應點，
+     用薄板樣條（thin-plate spline）把網格彎過去貼合照片，得到每個頂點在照片上的位置
   4. 烘焙：依每個三角形的 UV，把照片的顏色畫進貼圖（texture baking）；
      還沒處理的地方（後片、袖子背面）先用衣服的主色填滿
 貼圖畫在版片的 UV 上，縫合只移動頂點、不動 UV，所以縫好的衣服會自動帶著花樣。
@@ -38,6 +38,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools" / "chatgarment"))
 from gallery import draw, shaded  # noqa: E402
+from align_panels import align_panels  # noqa: E402
+import matplotlib.collections  # noqa: E402
 
 plt.rcParams["font.sans-serif"] = ["Microsoft JhengHei"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -163,11 +165,12 @@ def align(xy, faces, mask_p):
 
 
 # ---------- 4. 烘焙 ----------
-def bake(uv_px, photo_px, faces_uv, faces_v, photo, size):
-    """在 UV 貼圖上逐三角形算每個像素對應到照片的位置，最後一次取樣。"""
+def bake(uv_px, corner_px, faces_uv, photo, size):
+    """在 UV 貼圖上逐三角形算每個像素對應到照片的位置，最後一次取樣。
+    corner_px：每個三角形三個角在照片上的像素座標 (F,3,2)。"""
     map_x = np.full((size, size), -1, np.float32)
     map_y = np.full((size, size), -1, np.float32)
-    for tri_uv, tri_v in zip(faces_uv, faces_v):
+    for tri_uv, (pa, pb, pc) in zip(faces_uv, corner_px):
         a, b, c = uv_px[tri_uv]
         lo = np.floor(np.minimum(np.minimum(a, b), c)).astype(int)
         hi = np.ceil(np.maximum(np.maximum(a, b), c)).astype(int)
@@ -182,7 +185,6 @@ def bake(uv_px, photo_px, faces_uv, faces_v, photo, size):
         if not inside.any():
             continue
         w = w[inside]
-        pa, pb, pc = photo_px[tri_v]
         q = pa + w[:, :1] * (pb - pa) + w[:, 1:] * (pc - pa)
         px, py = xx.ravel()[inside], yy.ravel()[inside]
         map_x[py, px], map_y[py, px] = q[:, 0], q[:, 1]
@@ -197,6 +199,9 @@ def main():
     ap.add_argument("--photo", default=None, help="正面平拍照，預設依衣服名稱找 output/chatgarment_ai/inputs")
     ap.add_argument("--body-obj", default=None,
                     help="預覽用的身體網格（公尺、腳底在 0）。預設：T-pose 衣服用 SMPL 模板，其他用 GarmentCode 男性平均")
+    ap.add_argument("--method", choices=["tps", "panel"], default="tps",
+                    help="tps＝整件彎曲貼合輪廓（預設）；panel＝每片版片各自對齊、花紋不變形"
+                         "（實驗中：網格和照片形狀要很接近才對得上，見 align_panels.py）")
     args = ap.parse_args()
 
     folder = MESHES / args.mesh
@@ -206,7 +211,8 @@ def main():
 
     box_v, vt, faces, faces_uv = read_obj(folder / f"{name}_boxmesh.obj")
     sewn_v, _, _, _ = read_obj(folder / f"{name}_sewn.obj")
-    panel = face_panels(faces, folder / f"{name}_sim_segmentation.txt")
+    seg_file = folder / f"{name}_sim_segmentation.txt"
+    panel = face_panels(faces, seg_file)
     front = np.array([any(k in p for k in FRONT_PANELS) for p in panel])
     print(f"照片：{photo_path.name}；前片＋袖子正面 {front.sum()} 個三角形／共 {len(faces)} 個")
 
@@ -215,18 +221,26 @@ def main():
     base = np.median(photo[mask_p > 0], axis=0)
 
     # 2、3. 平放＋對齊（輪廓用全部版片，貼圖只用前片）
-    photo_px, src, dst = align(box_v[:, :2], faces, mask_p)
+    if args.method == "panel":
+        corner_px, info = align_panels(box_v, vt, faces, faces_uv, panel,
+                                       seg_file.read_text().splitlines(), mask_p, "front")
+        src = dst = np.zeros((0, 2))
+        print(f"版片對齊：重疊率 IoU {info['iou']:.3f}；每公分 {info['px_per_cm']:.1f} 像素；"
+              f"袖子轉 {info['sleeve_deg'][0]:.1f}°／{info['sleeve_deg'][1]:.1f}°")
+    else:
+        photo_px, src, dst = align(box_v[:, :2], faces, mask_p)
+        corner_px = photo_px[faces]
 
     # 4. 烘焙
     uv = vt / max(1.0, vt.max())
     uv_px = np.column_stack([uv[:, 0], 1 - uv[:, 1]]) * TEX_SIZE
-    tex, covered = bake(uv_px, photo_px, faces_uv[front], faces[front], photo, TEX_SIZE)
+    tex, covered = bake(uv_px, corner_px[front], faces_uv[front], photo, TEX_SIZE)
     tex[~covered] = base
     # 版片邊緣往外補幾個像素，避免取樣時接縫露出底色
     band = cv2.dilate(covered.astype(np.uint8), np.ones((7, 7), np.uint8)) & (~covered).astype(np.uint8)
     tex = cv2.inpaint(tex, band * 255, 3, cv2.INPAINT_TELEA)
 
-    dst_dir = OUT / name
+    dst_dir = OUT / name if args.method == "tps" else OUT / f"{name}_{args.method}"
     dst_dir.mkdir(parents=True, exist_ok=True)
     Image.fromarray(tex).save(dst_dir / "texture.png")
     obj_text = (folder / f"{name}_sewn.obj").read_text().splitlines()
@@ -242,9 +256,12 @@ def main():
     axes[0].imshow(photo); axes[0].contour(mask_p, [128], colors="lime", linewidths=1.5)
     axes[0].set_title("① 去背（綠線＝切出的衣服範圍）", fontsize=13)
     axes[1].imshow(photo)
-    axes[1].triplot(photo_px[:, 0], photo_px[:, 1], faces[front], color="cyan", linewidth=0.15)
-    axes[1].plot(*dst[::6].T, "o", color="lime", ms=3); axes[1].plot(*src[::6].T, "o", color="red", ms=3)
-    axes[1].set_title("②③ 對齊（青＝網格；紅→綠＝輪廓對應點）", fontsize=13)
+    tris = corner_px[front]
+    axes[1].add_collection(matplotlib.collections.PolyCollection(
+        tris, facecolors="none", edgecolors="cyan", linewidths=0.15))
+    if len(src):
+        axes[1].plot(*dst[::6].T, "o", color="lime", ms=3); axes[1].plot(*src[::6].T, "o", color="red", ms=3)
+    axes[1].set_title("②③ 對齊（青＝網格" + ("；紅→綠＝輪廓對應點）" if len(src) else "，版片各自對齊）"), fontsize=13)
     axes[2].imshow(tex); axes[2].set_title("④ 烘焙出的顏色貼圖（UV）", fontsize=13)
     for ax in axes:
         ax.axis("off")

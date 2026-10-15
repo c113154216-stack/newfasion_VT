@@ -5,7 +5,8 @@
 
 文字部分決定「是哪一種」（上衣類型、領型、有沒有袖子…），
 數值部分決定「多少」（衣長、寬鬆度、袖長…，0～1 正規化後還原到各參數的範圍）。
-轉換邏輯直接用 ChatGarment 的 recursive_change_params_1float，和作者的流程一致。
+轉換邏輯直接用 ChatGarment 的 recursive_change_params_1float，和作者的流程一致；
+之後再用第一步的文字描述修正領子配件（fix_collar：描述寫圓領，版型卻多了翻領／高領）。
 
 要用 GarmentCode 的 .venv（不是 .venv-chatgarment）：
     .venv\\Scripts\\python tools\\chatgarment\\to_design.py <infer.py 的輸出資料夾> [--no-mesh]
@@ -26,6 +27,7 @@ import yaml
 REPO = Path(__file__).resolve().parents[2]
 CG_ROOT = REPO / "third_party" / "ChatGarment"
 GC_ROOT = REPO / "third_party" / "GarmentCodeRC"
+FIXED = set()  # 這次執行中領子被修正過的結果（舊網格沒有 design_used.yaml 時用來判斷要不要重做）
 
 
 def load_chatgarment_utils():
@@ -37,6 +39,43 @@ def load_chatgarment_utils():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def read_description(result_dir):
+    """infer.py 第一步的文字描述（output.txt 的 [描述] 段），讀不到就回傳空 dict。"""
+    import ast
+    try:
+        text = (result_dir / "output.txt").read_text(encoding="utf-8")
+        return ast.literal_eval(text.split("[描述]")[1].split("[版型]")[0].strip())
+    except Exception:
+        return {}
+
+
+def collar_from_description(styles):
+    """依文字描述決定領子配件（GarmentCode 只有 Hood2Panels、Turtle、SimpleLapel、無 四種）。
+    描述看不出來時回傳 "?"，表示不改模型的選擇。"""
+    hood = " ".join(styles.get("hood") or []).lower()
+    collar = " ".join(styles.get("collar") or []).lower()
+    if hood and "no hood" not in hood:
+        return "Hood2Panels"
+    if any(k in collar for k in ("turtle", "high neck", "mock neck", "funnel")):
+        return "Turtle"
+    if "collarless" in collar or any(k in collar for k in ("crew", "round", "v-neck", "v neck", "scoop", "boat")):
+        return None
+    if any(k in collar for k in ("lapel", "notch", "collar")):  # polo collar、shirt collar、notched collar…
+        return "SimpleLapel"
+    return "?"
+
+
+def fix_collar(design, styles):
+    """ChatGarment 先寫文字描述、再產生版型參數，兩步沒有強制一致：
+    常見的錯是描述寫圓領，版型卻多一個翻領或高領。以描述為準修正，回傳 (舊, 新) 或 None。"""
+    want = collar_from_description(styles)
+    have = design["collar"]["component"]["style"]["v"]
+    if want == "?" or want == have:
+        return None
+    design["collar"]["component"]["style"]["v"] = want
+    return have, want
 
 
 def to_designs(gu, result_dir):
@@ -57,6 +96,15 @@ def to_designs(gu, result_dir):
         raw = cfg if "design" in cfg else {"design": cfg}
         design = gu.recursive_change_params_1float(copy.deepcopy(gu.designs_config), raw, float_dict,
                                                    invnorm_float=True, parent_path=None)["design"]
+        if name in ("upper", "wholebody"):
+            desc = read_description(result_dir)
+            key = "upperbody_garment" if name == "upper" else "wholebody_garment"
+            styles = (desc.get(key) or {}).get("geometry_styles", {})
+            changed = fix_collar(design, styles)
+            if changed:
+                FIXED.add(result_dir.name)
+                print(f"[{result_dir.name}] 領子配件 {changed[0]} → {changed[1]}"
+                      f"（描述：collar={styles.get('collar')}、hood={styles.get('hood')}）")
         designs[name] = design
     return designs
 
@@ -113,12 +161,19 @@ def main():
         design["meta"]["bottom"]["v"] = None
         design["meta"]["wb"]["v"] = None
         name = f"{args.tag}_{d.name}"
-        if (dm.OUT_ROOT / name / f"{name}_sewn.obj").exists():
-            print(f"[略過] {name}（已經縫好）")
-            continue
+        folder = dm.OUT_ROOT / name
+        used = folder / "design_used.yaml"  # 生成這份網格時用的款式，款式改了（例如修正領子）就重做
+        text = yaml.safe_dump({"design": design}, allow_unicode=True)
+        if (folder / f"{name}_sewn.obj").exists():
+            same = used.read_text(encoding="utf-8") == text if used.exists() else d.name not in FIXED
+            if same:
+                print(f"[略過] {name}（已經縫好）")
+                continue
+            print(f"[重做] {name}（款式改了）")
         try:
             _, _, paths = dm.generate(design, body.with_suffix(".yaml"), name)
             sew.main(paths.g_box_mesh.parent, body.with_suffix(".obj"))
+            used.write_text(text, encoding="utf-8")
         except Exception as e:
             print(f"[{d.name}] 生成網格失敗：{e}")
 
