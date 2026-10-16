@@ -1,0 +1,7 @@
+{
+  "image": "output\\chatgarment_ai\\inputs_v2\\g06_red_tee.png",
+  "mode": "4bit",
+  "seconds": 33.7,
+  "peak_gpu_gib": 5.91,
+  "n_floats": 152
+}
