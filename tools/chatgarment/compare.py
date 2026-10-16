@@ -3,9 +3,10 @@
 比較 4-bit 和 bf16（原版精度）兩次 ChatGarment 推論的結果，輸出 Markdown 報告。
 
 跑法（GarmentCode 的 .venv，先跑過兩種模式的 infer.py 和 to_design.py）：
-    .venv\\Scripts\\python tools\\chatgarment\\compare.py output\\chatgarment_ai
+    .venv\\Scripts\\python tools\\chatgarment\\compare.py output\\chatgarment_ai [4-bit 資料夾 bf16 資料夾]
+例如比較新照片：compare.py output\\chatgarment_ai 4bit_v2 bf16_3090
 
-輸出：output/chatgarment_ai/report.md
+輸出：output/chatgarment_ai/report.md（指定資料夾時是 report_<4-bit 資料夾>_vs_<bf16 資料夾>.md）
 """
 import json
 import sys
@@ -51,10 +52,11 @@ def load(mode_dir, name):
     return out
 
 
-def main(root):
+def main(root, q_name="4bit", b_name="bf16"):
     root = Path(root)
-    q, b = root / "4bit", root / "bf16"
-    names = sorted(p.stem for p in (root / "inputs").iterdir())
+    q, b = root / q_name, root / b_name
+    # 兩邊都有結果的照片（某一邊少跑的，例如 webp 被跳過，就不比）
+    names = sorted({p.name for p in q.iterdir() if p.is_dir()} & {p.name for p in b.iterdir() if p.is_dir()})
     lines = ["# ChatGarment：4-bit vs bf16（原版精度）", "",
              "同一張照片分別用兩種精度推論。bf16 和作者的設定相同，當作標準答案。", ""]
 
@@ -83,11 +85,11 @@ def main(root):
     if float_diffs:
         summary.append(f"76 個正規化數值（0～1）的平均絕對差：{np.mean(float_diffs):.3f}。")
     lines[4:4] = summary + [""]
-    path = root / "report.md"
+    path = root / ("report.md" if (q_name, b_name) == ("4bit", "bf16") else f"report_{q_name}_vs_{b_name}.md")
     path.write_text("\n".join(lines), encoding="utf-8")
     print(path)
     print("\n".join(summary))
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(*sys.argv[1:4])
