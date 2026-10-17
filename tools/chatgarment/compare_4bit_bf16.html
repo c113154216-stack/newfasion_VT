@@ -1,0 +1,328 @@
+<!doctype html>
+<!--
+  4-bit（RTX 5050）vs 原版 bf16（RTX 3090）網格對照。
+  先生成兩邊的網格：
+      .venv\Scripts\python tools\chatgarment\to_design.py results\chatgarment_ai\4bit_v2 --tag ai4bit_v2
+      .venv\Scripts\python tools\chatgarment\to_design.py results\chatgarment_ai\bf16_3090 --tag aibf16_3090
+  再從 newfashion_VT 根目錄開伺服器：
+      python -m http.server 8766
+  開 http://localhost:8766/tools/chatgarment/compare_4bit_bf16.html
+-->
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>4-bit 與 bf16 網格對照</title>
+  <script type="importmap">
+    { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+      "js-yaml": "https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.mjs"
+    } }
+  </script>
+  <style>
+    :root {
+      --bg: #1b1d21; --panel: #23262c; --line: #3a3f47; --text: #e6e6e6; --muted: #9aa0a6;
+      --c4: #5b9bff; --c16: #ff9a4d; --diff: #ffd166;
+    }
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        --bg: #f4f4f2; --panel: #ffffff; --line: #dcdcd8; --text: #1d1d1b; --muted: #66665f;
+        --c4: #2f6fd6; --c16: #d9701f; --diff: #a87a00;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+                 font: 13px/1.5 "Microsoft JhengHei", system-ui, sans-serif; }
+    body { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100dvh; overflow: hidden; }
+    header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px;
+             background: var(--panel); border-bottom: 1px solid var(--line); }
+    header h1 { font-size: 14px; margin: 0 8px 0 0; }
+    .chips, .seg { display: flex; flex-wrap: wrap; gap: 4px; }
+    button { font: inherit; color: var(--text); background: transparent; border: 1px solid var(--line);
+             border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+    button[aria-pressed="true"] { background: var(--c4); border-color: var(--c4); color: #fff; }
+    .spacer { flex: 1; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0; }
+    #view { position: relative; min-width: 0; min-height: 0; }
+    #view canvas { display: block; width: 100%; height: 100%; }
+    .tag { position: absolute; top: 10px; padding: 2px 8px; border-radius: 6px; font-size: 12px;
+           background: var(--panel); border: 1px solid var(--line); pointer-events: none; }
+    .tag.t4 { color: var(--c4); } .tag.t16 { color: var(--c16); }
+    #tagL { left: 10px; } #tagR { left: calc(50% + 10px); }
+    #view.overlay #tagR { left: 10px; top: 36px; }
+    #divider { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--line); }
+    #view.overlay #divider { display: none; }
+    #status { position: absolute; bottom: 10px; left: 10px; color: var(--muted); font-size: 12px; }
+    aside { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 12px; }
+    aside h2 { font-size: 13px; margin: 0 0 8px; }
+    table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    th, td { padding: 5px 4px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 400; }
+    td.c4 { color: var(--c4); } td.c16 { color: var(--c16); }
+    tr.diff th::after { content: " ●"; color: var(--diff); }
+    .note { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+    .desc { font-size: 12px; color: var(--muted); white-space: pre-wrap; word-break: break-word; }
+    @media (max-width: 900px) {
+      main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 40%; }
+      aside { border-left: 0; border-top: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>4-bit 與 bf16 網格對照</h1>
+    <div class="chips" id="garments" role="group" aria-label="衣服"></div>
+    <span class="spacer"></span>
+    <div class="seg" id="mode" role="group" aria-label="顯示方式">
+      <button data-mode="split" aria-pressed="true">左右並排</button>
+      <button data-mode="overlay" aria-pressed="false">疊在一起</button>
+    </div>
+    <div class="seg">
+      <button id="wire" aria-pressed="false">網格線</button>
+      <button id="bodyBtn" aria-pressed="true">人體</button>
+    </div>
+  </header>
+  <main>
+    <div id="view">
+      <span class="tag t4" id="tagL">4-bit（RTX 5050）</span>
+      <span class="tag t16" id="tagR">bf16 原版（RTX 3090）</span>
+      <div id="divider"></div>
+      <span id="status"></span>
+    </div>
+    <aside>
+      <h2>款式參數</h2>
+      <table id="params"></table>
+      <p class="note">● 標示兩邊不同的項目。衣長、寬鬆、袖長是 ChatGarment 的相對數值（不是公分）；「網格」列是實際量到的尺寸。</p>
+      <h2 style="margin-top:16px">第一問的文字描述</h2>
+      <div class="desc" id="desc"></div>
+    </aside>
+  </main>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+    import yaml from "js-yaml";
+
+    const ROOT = "../../";
+    const GARMENTS = [
+      ["g03_blue_hoodie", "藍帽 T"],
+      ["g04_white_hoodie", "白帽 T"],
+      ["g05_beige_longsleeve_tee", "米色長袖 T"],
+      ["g06_red_tee", "紅 T"],
+      ["g07_grey_stripe_tee", "灰條紋 T"],
+      ["g08_white_tee", "白 T"],
+    ];
+    const SIDES = [
+      { key: "4bit", tag: "ai4bit_v2", results: "4bit_v2", color: 0x5b9bff },
+      { key: "bf16", tag: "aibf16_3090", results: "bf16_3090", color: 0xff9a4d },
+    ];
+    const $ = (id) => document.getElementById(id);
+    const state = { mode: "split", wire: false, body: true, current: null };
+
+    // ---------- 場景：兩個場景共用一台相機，左右各畫一半 ----------
+    const view = $("view");
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setScissorTest(true);
+    view.prepend(renderer.domElement);
+    const camera = new THREE.PerspectiveCamera(30, 1, 1, 2000);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    function makeScene() {
+      const s = new THREE.Scene();
+      s.add(new THREE.HemisphereLight(0xffffff, 0x666666, 2.2));
+      const d = new THREE.DirectionalLight(0xffffff, 1.6);
+      d.position.set(80, 200, 160);
+      s.add(d);
+      return s;
+    }
+    const scenes = { split: [makeScene(), makeScene()], overlay: makeScene() };
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x8c8c8c, roughness: 0.9, transparent: true, opacity: 0.55 });
+    const loader = new OBJLoader();
+    const cache = new Map();
+
+    async function loadGeom(url, scale) {
+      if (!cache.has(url)) {
+        cache.set(url, loader.loadAsync(url).then((obj) => {
+          let g = null;
+          obj.traverse((o) => { if (o.isMesh && !g) g = o.geometry; });
+          g.scale(scale, scale, scale);
+          g.computeVertexNormals();
+          return g;
+        }));
+      }
+      return cache.get(url);
+    }
+    async function loadText(url) {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`${res.status} ${url}`);
+      return res.text();
+    }
+
+    // 每件衣服在兩個場景各放一份；疊在一起時兩件都放進同一個場景
+    let meshes = [];
+    function clearScenes() {
+      for (const m of meshes) m.parent && m.parent.remove(m);
+      meshes = [];
+    }
+    function garmentMeshes(geom, color, overlay) {
+      const solid = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({
+        color, roughness: 0.8, side: THREE.DoubleSide, transparent: overlay, opacity: overlay ? 0.55 : 1,
+        depthWrite: !overlay,
+      }));
+      const wire = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true, transparent: true, opacity: 0.18 }));
+      wire.visible = state.wire;
+      wire.userData.isWire = true;
+      return [solid, wire];
+    }
+
+    async function load(name) {
+      state.current = name;
+      $("status").textContent = "載入中…";
+      document.querySelectorAll("#garments button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.name === name));
+      try {
+        const [bodyGeom, ...geoms] = await Promise.all([
+          loadGeom(`${ROOT}third_party/GarmentCodeRC/assets/bodies/mean_male.obj`, 100),
+          ...SIDES.map((s) => loadGeom(`${ROOT}output/chatgarment/${s.tag}_${name}/${s.tag}_${name}_sewn.obj`, 1)),
+        ]);
+        const infos = await Promise.all(SIDES.map((s) => readInfo(s, name)));
+        if (state.current !== name) return;
+
+        clearScenes();
+        SIDES.forEach((s, i) => {
+          const body = new THREE.Mesh(bodyGeom, bodyMat);
+          body.userData.isBody = true;
+          body.visible = state.body;
+          const parts = garmentMeshes(geoms[i], s.color, false);
+          scenes.split[i].add(body, ...parts);
+          meshes.push(body, ...parts);
+          const over = garmentMeshes(geoms[i], s.color, true);
+          scenes.overlay.add(...over);
+          meshes.push(...over);
+        });
+        const ob = new THREE.Mesh(bodyGeom, bodyMat);
+        ob.userData.isBody = true;
+        ob.visible = state.body;
+        scenes.overlay.add(ob);
+        meshes.push(ob);
+
+        // 相機對準兩件合起來的範圍
+        const box = new THREE.Box3();
+        geoms.forEach((g) => { g.computeBoundingBox(); box.union(g.boundingBox); });
+        const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+        controls.target.copy(c);
+        if (!camera.userData.placed) {
+          camera.position.set(c.x, c.y + size.y * 0.1, c.z + Math.max(size.x, size.y) * 2.6);
+          camera.userData.placed = true;
+        }
+        controls.update();
+        renderTable(infos, geoms);
+        $("status").textContent = "拖曳旋轉（兩邊同步）、滾輪縮放、右鍵平移";
+      } catch (err) {
+        $("status").textContent = `載入失敗：${err.message}（先用 to_design.py 生成兩邊的網格）`;
+      }
+    }
+
+    async function readInfo(side, name) {
+      const dir = `${ROOT}results/chatgarment_ai/${side.results}/${name}`;
+      const [design, meta, out] = await Promise.all([
+        loadText(`${dir}/design_upper.yaml`).then((t) => yaml.load(t).design),
+        loadText(`${dir}/meta.json`).then(JSON.parse).catch(() => ({})),
+        loadText(`${dir}/output.txt`).catch(() => ""),
+      ]);
+      const desc = (out.split("[描述]")[1] || "").split("[版型]")[0].trim();
+      return { design, meta, desc };
+    }
+
+    // ---------- 參數表 ----------
+    function renderTable(infos, geoms) {
+      const v = (d, path) => path.split(".").reduce((o, k) => (o ? o[k] : undefined), d)?.v;
+      const num = (x) => (typeof x === "number" ? x.toFixed(2) : x ?? "—");
+      const measure = (g) => {
+        const s = g.boundingBox.getSize(new THREE.Vector3());
+        return { h: s.y, w: s.x, hem: g.boundingBox.min.y };
+      };
+      const [m4, m16] = geoms.map(measure);
+      const rows = [
+        ["上衣類型", (d) => v(d, "meta.upper")],
+        ["衣長", (d) => num(v(d, "shirt.length"))],
+        ["寬鬆度", (d) => num(v(d, "shirt.width"))],
+        ["下襬外擴", (d) => num(v(d, "shirt.flare"))],
+        ["領型", (d) => v(d, "collar.f_collar")],
+        ["領子配件", (d) => v(d, "collar.component.style") ?? "無"],
+        ["無袖", (d) => (v(d, "sleeve.sleeveless") ? "是" : "否")],
+        ["袖長", (d) => num(v(d, "sleeve.length"))],
+        ["袖口寬", (d) => num(v(d, "sleeve.end_width"))],
+      ];
+      const html = [`<tr><th></th><th style="color:var(--c4)">4-bit</th><th style="color:var(--c16)">bf16</th></tr>`];
+      for (const [label, f] of rows) {
+        const a = f(infos[0].design), b = f(infos[1].design);
+        html.push(`<tr class="${a !== b ? "diff" : ""}"><th>${label}</th><td class="c4">${a}</td><td class="c16">${b}</td></tr>`);
+      }
+      const cm = (x) => `${x.toFixed(1)} cm`;
+      const dh = m16.h - m4.h;
+      html.push(`<tr class="${Math.abs(dh) > 0.5 ? "diff" : ""}"><th>網格高度</th><td class="c4">${cm(m4.h)}</td><td class="c16">${cm(m16.h)}<br><small>${dh >= 0 ? "+" : ""}${dh.toFixed(1)}</small></td></tr>`);
+      html.push(`<tr><th>網格寬度</th><td class="c4">${cm(m4.w)}</td><td class="c16">${cm(m16.w)}</td></tr>`);
+      html.push(`<tr><th>下襬高度</th><td class="c4">${cm(m4.hem)}</td><td class="c16">${cm(m16.hem)}</td></tr>`);
+      const t = (m) => m.seconds;
+      const mem = (m) => m.peak_gpu_gib;
+      html.push(`<tr><th>推論時間</th><td class="c4">${t(infos[0].meta) ? t(infos[0].meta).toFixed(0) + " 秒" : "—"}</td><td class="c16">${t(infos[1].meta) ? t(infos[1].meta).toFixed(0) + " 秒" : "—"}</td></tr>`);
+      html.push(`<tr><th>顯示卡記憶體</th><td class="c4">${mem(infos[0].meta) ? mem(infos[0].meta).toFixed(1) + " GiB" : "—"}</td><td class="c16">${mem(infos[1].meta) ? mem(infos[1].meta).toFixed(1) + " GiB" : "—"}</td></tr>`);
+      $("params").innerHTML = html.join("");
+      $("desc").innerHTML = SIDES.map((s, i) =>
+        `<b style="color:var(--${i ? "c16" : "c4"})">${s.key}</b>\n${escapeHtml(infos[i].desc || "（沒有）")}`).join("\n\n");
+    }
+    function escapeHtml(s) {
+      return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+    }
+
+    // ---------- 控制 ----------
+    $("garments").innerHTML = GARMENTS.map(([n, l]) => `<button data-name="${n}" aria-pressed="false">${l}</button>`).join("");
+    $("garments").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) load(b.dataset.name); });
+    $("mode").addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      state.mode = b.dataset.mode;
+      $("mode").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      view.classList.toggle("overlay", state.mode === "overlay");
+      resize();
+    });
+    function toggle(id, key, test) {
+      $(id).addEventListener("click", () => {
+        state[key] = !state[key];
+        $(id).setAttribute("aria-pressed", state[key]);
+        meshes.forEach((m) => { if (test(m)) m.visible = state[key]; });
+      });
+    }
+    toggle("wire", "wire", (m) => m.userData.isWire);
+    toggle("bodyBtn", "body", (m) => m.userData.isBody);
+
+    function resize() {
+      const r = view.getBoundingClientRect();
+      renderer.setSize(r.width, r.height, false);
+      camera.aspect = (state.mode === "split" ? r.width / 2 : r.width) / r.height;
+      camera.updateProjectionMatrix();
+    }
+    new ResizeObserver(resize).observe(view);
+    renderer.setAnimationLoop(() => {
+      controls.update();
+      const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
+      if (state.mode === "split") {
+        [0, 1].forEach((i) => {
+          renderer.setViewport(i * w / 2, 0, w / 2, h);
+          renderer.setScissor(i * w / 2, 0, w / 2, h);
+          renderer.render(scenes.split[i], camera);
+        });
+      } else {
+        renderer.setViewport(0, 0, w, h);
+        renderer.setScissor(0, 0, w, h);
+        renderer.render(scenes.overlay, camera);
+      }
+    });
+    load(GARMENTS[3][0]);
+  </script>
+</body>
+</html>
