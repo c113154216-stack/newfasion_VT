@@ -96,6 +96,27 @@ def photo_mask(rgb):
     return ndimage.binary_fill_holes(mask > 0).astype(np.uint8) * 255
 
 
+def clean_collar(rgb, mask, base, top=0.2, half_width=0.2, max_diff=40.0):
+    """把領口附近跟衣服主色差太多的像素（領標、透過領口看到的後片內側陰影）用周圍顏色補掉。
+
+    平拍照的領口裡看到的是後片內側，領標就縫在那裡；對齊時網格前片的領口會對到照片輪廓最上面的凹口
+    （那是後領），所以前片最上面一小塊會取到領標。只處理領口附近：衣服範圍最上面 top 比例的高度、
+    中線左右 half_width 比例的寬度，胸前的 logo、印花不會被動到。
+    max_diff：Lab 色差超過多少算瑕疵（主色本身的布紋、光影差異大約在 10～25）。
+    回傳 (清理後的照片, 被補掉的範圍)。"""
+    ys, xs = np.nonzero(mask)
+    x0, x1, y0, y1 = xs.min(), xs.max(), ys.min(), ys.max()
+    cx, w, h = (x0 + x1) / 2, x1 - x0, y1 - y0
+    region = np.zeros(mask.shape, bool)
+    region[y0:int(y0 + top * h), int(cx - half_width * w):int(cx + half_width * w)] = True
+    lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
+    base_lab = cv2.cvtColor(np.uint8([[base]]), cv2.COLOR_RGB2LAB).astype(np.float32)[0, 0]
+    diff = np.linalg.norm(lab - base_lab, axis=2)
+    defect = (region & (mask > 0) & (diff > max_diff)).astype(np.uint8)
+    defect = cv2.dilate(defect, np.ones((5, 5), np.uint8))
+    return cv2.inpaint(rgb, defect * 255, 7, cv2.INPAINT_TELEA), defect
+
+
 # ---------- 2、3. 平放與對齊 ----------
 def raster(points, faces, shape):
     mask = np.zeros(shape, np.uint8)
@@ -202,6 +223,8 @@ def main():
     ap.add_argument("--method", choices=["tps", "panel"], default="tps",
                     help="tps＝整件彎曲貼合輪廓（預設）；panel＝每片版片各自對齊、花紋不變形"
                          "（實驗中：網格和照片形狀要很接近才對得上，見 align_panels.py）")
+    ap.add_argument("--keep-collar", action="store_true",
+                    help="不清理領口附近的領標和陰影（預設會清理，見 clean_collar）")
     args = ap.parse_args()
 
     folder = MESHES / args.mesh
@@ -219,6 +242,10 @@ def main():
     # 1. 去背
     mask_p = photo_mask(photo)
     base = np.median(photo[mask_p > 0], axis=0)
+    photo_raw, collar_fix = photo, None
+    if not args.keep_collar:
+        photo, collar_fix = clean_collar(photo, mask_p, base)
+        print(f"領口清理：補掉 {int(collar_fix.sum())} 個像素")
 
     # 2、3. 平放＋對齊（輪廓用全部版片，貼圖只用前片）
     if args.method == "panel":
@@ -253,8 +280,10 @@ def main():
 
     # 對齊檢查圖
     fig, axes = plt.subplots(1, 3, figsize=(16, 6))
-    axes[0].imshow(photo); axes[0].contour(mask_p, [128], colors="lime", linewidths=1.5)
-    axes[0].set_title("① 去背（綠線＝切出的衣服範圍）", fontsize=13)
+    axes[0].imshow(photo_raw); axes[0].contour(mask_p, [128], colors="lime", linewidths=1.5)
+    if collar_fix is not None and collar_fix.any():
+        axes[0].contour(collar_fix, [0.5], colors="yellow", linewidths=1.2)
+    axes[0].set_title("① 去背（綠線＝衣服範圍；黃線＝領口清理掉的地方）", fontsize=13)
     axes[1].imshow(photo)
     tris = corner_px[front]
     axes[1].add_collection(matplotlib.collections.PolyCollection(
