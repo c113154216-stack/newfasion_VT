@@ -38,6 +38,9 @@ VARIANTS = {
     # 第三輪：分開看「領口」和「領口以外」各自讓衣服往上移多少（mask 在 main 裡換成實際的邊）
     "limit2_w100_neck_only": {"stretch_limit": 0.02, "stretch_weight": 100.0, "stretch_mask": "neck"},
     "limit2_w100_not_neck": {"stretch_limit": 0.02, "stretch_weight": 100.0, "stretch_mask": "not_neck"},
+    # 第四輪：加彎曲剛度，處理限制拉長後擠出的細碎皺褶
+    "limit2_w100_bend1": {"stretch_limit": 0.02, "stretch_weight": 100.0, "bend": 1.0},
+    "limit2_w100_bend5": {"stretch_limit": 0.02, "stretch_weight": 100.0, "bend": 5.0},
 }
 
 

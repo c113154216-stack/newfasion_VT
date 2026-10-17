@@ -48,7 +48,7 @@ def push_out(x, body_v, body_f, body_n, margin):
 
 def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step=1.0,
         iterations=400, anchor=1e-4, stretch_limit=None, stretch_weight=20.0, gravity=0.0,
-        stretch_mask=None):
+        stretch_mask=None, bend=0.0):
     """局部－全域交替求解，最小化
         Σ w_e(|xi − xj| − 原始長度)²  ＋  body_weight · Σ|xi − 推到身體外的位置|²  ＋  gravity · Σ yi
     局部：每條邊依目前方向算出長度剛好等於原始長度的目標向量；每個頂點算出「不在身體裡」的目標位置
@@ -61,6 +61,9 @@ def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step
         推身體的權重（10）比一般邊（1）大，布料卡在肩膀、脖子這類斜面時會選擇被拉長；
         把拉太長的邊變硬，布料就改成滑開。None 表示不限制（所有邊權重 1）。
     stretch_mask：長度 m 的布林陣列，只有 True 的邊受 stretch_limit 限制；None 表示全部的邊。
+    bend：彎曲剛度（拉普拉斯平滑），懲罰每個頂點偏離鄰居平均位置的量 bend · Σ|xi − 鄰居平均|²。
+        沒有它時，布被壓縮會擠成細碎的小皺（像揉皺的紙）；加上後多出來的布會形成平順的大褶。
+        太大會把布往內拉平、抹掉該有的立體感。0 表示不加。
     gravity：每個頂點往下的固定力（單位同邊長彈簧，力＝邊被拉長幾公分 × 權重）。
         0 表示沒有重力，衣服停在 box mesh 擺放的位置附近。"""
     import scipy.sparse as sp
@@ -71,7 +74,15 @@ def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step
     cols = edges.reshape(-1)
     vals = np.tile([1.0, -1.0], m)
     A = sp.csr_matrix((vals, (rows, cols)), shape=(m, n))  # (A x)_e = xi − xj
-    AtA = (A.T @ A + anchor * sp.identity(n)).tocsc()
+    # 拉普拉斯矩陣：(L x)_i ＝ xi − 鄰居平均。目標 L x ＝ 0，不隨迭代改變，直接加進矩陣
+    if bend > 0:
+        adj = sp.csr_matrix((np.ones(2 * m), (np.r_[edges[:, 0], edges[:, 1]], np.r_[edges[:, 1], edges[:, 0]])), shape=(n, n))
+        deg = np.asarray(adj.sum(axis=1)).ravel()
+        Lap = sp.identity(n) - sp.diags(1.0 / np.maximum(deg, 1)) @ adj
+        bend_term = bend * (Lap.T @ Lap)
+    else:
+        bend_term = sp.csr_matrix((n, n))
+    AtA = (A.T @ A + anchor * sp.identity(n) + bend_term).tocsc()
     solve = factorized(AtA)
     w = np.ones(m)
 
@@ -91,7 +102,7 @@ def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step
             w_new = np.where(over, stretch_weight, 1.0)
             if not np.array_equal(w_new, w):
                 w = w_new
-                AtA = (A.T @ sp.diags(w) @ A + anchor * sp.identity(n)).tocsc()
+                AtA = (A.T @ sp.diags(w) @ A + anchor * sp.identity(n) + bend_term).tocsc()
                 refactor = True
         d *= (rest / length)[:, None]
         b = A.T @ (w[:, None] * d) + anchor * vertices
