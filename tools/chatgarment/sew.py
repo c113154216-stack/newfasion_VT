@@ -47,7 +47,8 @@ def push_out(x, body_v, body_f, body_n, margin):
 
 
 def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step=1.0,
-        iterations=400, anchor=1e-4, stretch_limit=None, stretch_weight=20.0, gravity=0.0):
+        iterations=400, anchor=1e-4, stretch_limit=None, stretch_weight=20.0, gravity=0.0,
+        stretch_mask=None):
     """局部－全域交替求解，最小化
         Σ w_e(|xi − xj| − 原始長度)²  ＋  body_weight · Σ|xi − 推到身體外的位置|²  ＋  gravity · Σ yi
     局部：每條邊依目前方向算出長度剛好等於原始長度的目標向量；每個頂點算出「不在身體裡」的目標位置
@@ -59,6 +60,7 @@ def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step
     stretch_limit：邊被拉長超過這個比例（例如 0.05 ＝ 5%）時，該邊的權重 w_e 改成 stretch_weight。
         推身體的權重（10）比一般邊（1）大，布料卡在肩膀、脖子這類斜面時會選擇被拉長；
         把拉太長的邊變硬，布料就改成滑開。None 表示不限制（所有邊權重 1）。
+    stretch_mask：長度 m 的布林陣列，只有 True 的邊受 stretch_limit 限制；None 表示全部的邊。
     gravity：每個頂點往下的固定力（單位同邊長彈簧，力＝邊被拉長幾公分 × 權重）。
         0 表示沒有重力，衣服停在 box mesh 擺放的位置附近。"""
     import scipy.sparse as sp
@@ -83,7 +85,10 @@ def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step
         length = np.maximum(np.linalg.norm(d, axis=1), 1e-9)
         refactor = False
         if stretch_limit is not None:
-            w_new = np.where(length > rest * (1 + stretch_limit), stretch_weight, 1.0)
+            over = length > rest * (1 + stretch_limit)
+            if stretch_mask is not None:
+                over &= stretch_mask
+            w_new = np.where(over, stretch_weight, 1.0)
             if not np.array_equal(w_new, w):
                 w = w_new
                 AtA = (A.T @ sp.diags(w) @ A + anchor * sp.identity(n)).tocsc()

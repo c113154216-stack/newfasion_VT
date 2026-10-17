@@ -35,6 +35,9 @@ VARIANTS = {
     "limit2_w100": {"stretch_limit": 0.02, "stretch_weight": 100.0},
     "limit2_w100_g002": {"stretch_limit": 0.02, "stretch_weight": 100.0, "gravity": 0.002},
     "limit2_w100_g005": {"stretch_limit": 0.02, "stretch_weight": 100.0, "gravity": 0.005},
+    # 第三輪：分開看「領口」和「領口以外」各自讓衣服往上移多少（mask 在 main 裡換成實際的邊）
+    "limit2_w100_neck_only": {"stretch_limit": 0.02, "stretch_weight": 100.0, "stretch_mask": "neck"},
+    "limit2_w100_not_neck": {"stretch_limit": 0.02, "stretch_weight": 100.0, "stretch_mask": "not_neck"},
 }
 
 
@@ -71,6 +74,9 @@ def report(x, faces, edges, rest, body, neck_ids):
         "在身體裡的頂點 %": round(float(inside.mean() * 100), 2),
         "衣服最高點 y cm": round(float(x[:, 1].max()), 1),
         "下襬 y cm": round(float(x[:, 1].min()), 1),
+        # 前中心線（x≈0、前面）的最高、最低點：看整件衣服往上下移了多少，以及布本身有沒有變長
+        "前中心最高 y cm": round(float(x[(np.abs(x[:, 0]) < 1.5) & (x[:, 2] > 0), 1].max()), 1),
+        "前中心最低 y cm": round(float(x[(np.abs(x[:, 0]) < 1.5) & (x[:, 2] > 0), 1].min()), 1),
     }
 
 
@@ -92,7 +98,12 @@ def main(folder, body_name="mean_male", only=None):
         if only and name not in only:
             continue
         t0 = time.time()
-        x = sew(v, edges, rest, body=body, **params)
+        kwargs = dict(params)
+        if kwargs.get("stretch_mask") in ("neck", "not_neck"):
+            neck_mask = np.zeros(len(edges), bool)
+            neck_mask[neck_ids] = True
+            kwargs["stretch_mask"] = neck_mask if kwargs["stretch_mask"] == "neck" else ~neck_mask
+        x = sew(v, edges, rest, body=body, **kwargs)
         write_obj_with_new_positions(src, src.with_name(src.name.replace("_boxmesh.obj", f"_sewn_{name}.obj")), x)
         results[name] = {"參數": params, "秒": round(time.time() - t0), **report(x, f, edges, rest, body, neck_ids)}
         print(name, json.dumps(results[name], ensure_ascii=False))
