@@ -31,6 +31,29 @@ FC_RANGE = (0.3, 2.0)
 BC_RANGE = (0.0, 2.0)
 
 
+# 第一問描述裡的領型字眼 → GarmentCode 的領口形狀（前後同一種）
+NECK_SHAPES = [
+    (("v-neck", "v neck", "vneck"), "VNeckHalf"),
+    (("square",), "SquareNeckHalf"),
+    (("crew", "round", "scoop"), "CircleNeckHalf"),
+]
+
+
+def fix_neck_shape(design, styles):
+    """ChatGarment 先寫文字描述、再產生版型參數，兩步沒有強制一致：
+    常見的錯是描述寫 crew neck（圓領），版型卻是方領、弧形領或 V 領。以描述為準修正領口形狀。
+    styles：第一問描述的 geometry_styles。描述沒提到領型（例如帽 T 只寫 collarless）就不改。
+    回傳 (舊, 新) 或 None。"""
+    text = " ".join(styles.get("collar") or []).lower()
+    want = next((shape for keys, shape in NECK_SHAPES if any(k in text for k in keys)), None)
+    collar = design["collar"]
+    have = collar["f_collar"]["v"]
+    if want is None or (have == want and collar["b_collar"]["v"] == want):
+        return None
+    collar["f_collar"]["v"] = collar["b_collar"]["v"] = want
+    return have, want
+
+
 def _depths(design, body, MetaGarment):
     """組出版片，回傳（前深, 後深）cm；量不到（例如前開襟沒有中心線）回傳 None。"""
     with contextlib.redirect_stdout(io.StringIO()):
