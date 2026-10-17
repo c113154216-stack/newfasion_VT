@@ -167,33 +167,36 @@ def photo_front_neckline(rgb, mask, n=41):
     path = np.array(path[::-1], float)
     if len(path) < 0.4 * neck_w:
         return None
-    # 左右對稱的二次曲線 y = a·(x−中線)² + c，兩個頸側點加大權重，剔除離群點（單邊的皺褶）
-    u = np.r_[(path[:, 0] - mid) ** 2, [(L_snp[0] - mid) ** 2] * 10, [(R_snp[0] - mid) ** 2] * 10]
-    yy = np.r_[path[:, 1], [L_snp[1]] * 10, [R_snp[1]] * 10]
-    keep = np.ones(len(u), bool)
-    for _ in range(4):
-        a, c = np.polyfit(u[keep], yy[keep], 1)
-        res = np.abs(a * u + c - yy)
-        keep = res < max(3 * np.median(res[keep]), 2.5); keep[-20:] = True
-    # 羅紋寬度：外緣上方緊鄰的那條暗線是羅紋內緣（開口的邊）。衣服版片沒有另外做羅紋，
-    # 前片的邊緣就是開口，所以要對到內緣，羅紋才會成為網格領口邊上的那一圈
-    widths = []
+    def sym_fit(pts):
+        """左右對稱的二次曲線 y = a·(x−中線)² + c，兩個頸側點加大權重，剔除離群點（單邊的皺褶）。"""
+        u = np.r_[(pts[:, 0] - mid) ** 2, [(L_snp[0] - mid) ** 2] * 10, [(R_snp[0] - mid) ** 2] * 10]
+        yy = np.r_[pts[:, 1], [L_snp[1]] * 10, [R_snp[1]] * 10]
+        keep = np.ones(len(u), bool)
+        for _ in range(4):
+            a, c = np.polyfit(u[keep], yy[keep], 1)
+            res = np.abs(a * u + c - yy)
+            keep = res < max(3 * np.median(res[keep]), 2.5)
+            keep[-20:] = True
+        return a, c
+
+    # 羅紋內緣（開口的邊）：外緣上方緊鄰的那條暗線。衣服版片沒有另外做羅紋，前片的邊緣就是開口，
+    # 所以網格領口要對到內緣，羅紋才會成為網格領口邊上、整圈一樣寬的那一圈
+    inner = []
     for (x, y_out) in path:
         i = int(x - xs_[0])
-        above = [y_out - y for y, _ in cands[i] if 3 <= y_out - y <= 0.25 * neck_w]
+        above = [y for y, _ in cands[i] if 3 <= y_out - y <= 0.25 * neck_w]
         if above:
-            widths.append(min(above))
-    rib = float(np.median(widths)) if len(widths) >= 5 else 0.0
+            inner.append((x, max(above)))
     gx = np.linspace(L_snp[0], R_snp[0], n)
-    gy = a * (gx - mid) ** 2 + c
-    if rib > 0:
-        # 沿曲線法線往開口內側（上方）平移羅紋寬度；兩端是頸側點，不動
-        dy = 2 * a * (gx - mid)
-        nrm = np.column_stack([dy, -np.ones_like(gx)]) / np.sqrt(dy ** 2 + 1)[:, None]
-        fade = np.sin(np.linspace(0, np.pi, n))
-        inner = np.column_stack([gx, gy]) + nrm * rib * fade[:, None]
-        return inner, (path[:, 0], path[:, 1]), (L_snp, R_snp), rib
-    return np.column_stack([gx, gy]), (path[:, 0], path[:, 1]), (L_snp, R_snp), rib
+    a_o, c_o = sym_fit(path)
+    outer_y = a_o * (gx - mid) ** 2 + c_o
+    if len(inner) >= 0.3 * neck_w:
+        a_i, c_i = sym_fit(np.array(inner, float))
+        inner_y = a_i * (gx - mid) ** 2 + c_i
+        rib = float(c_o - c_i)
+    else:
+        inner_y, rib = outer_y, 0.0
+    return np.column_stack([gx, inner_y]), (path[:, 0], path[:, 1]), (L_snp, R_snp), rib, np.column_stack([gx, outer_y])
 
 
 def mesh_front_neckline(folder, name):
