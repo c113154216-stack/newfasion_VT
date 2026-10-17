@@ -1,0 +1,170 @@
+<!doctype html>
+<!--
+  縫合參數實驗的並排檢視：讀 sew_experiment.py 產生的 *_sewn_<設定>.obj 和 sew_experiment.json。
+  從 newfashion_VT 根目錄開伺服器：python -m http.server 8766
+  開 http://localhost:8766/tools/chatgarment/sew_variants.html?g=ai4bit_v2_g06_red_tee
+-->
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>縫合參數比較</title>
+  <script type="importmap">
+    { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    } }
+  </script>
+  <style>
+    :root { --bg: #1b1d21; --panel: #23262c; --line: #3a3f47; --text: #e6e6e6; --muted: #9aa0a6; --accent: #5b9bff; --bad: #ff8a65; }
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) { --bg: #f4f4f2; --panel: #fff; --line: #dcdcd8; --text: #1d1d1b; --muted: #66665f; --accent: #2f6fd6; --bad: #c4502b; }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.5 "Microsoft JhengHei", system-ui, sans-serif; }
+    body { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100dvh; overflow: hidden; }
+    header { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+    header h1 { font-size: 14px; margin: 0 8px 0 0; }
+    button { font: inherit; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+    button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+    #view { position: relative; min-height: 0; }
+    #view canvas { display: block; width: 100%; height: 100%; }
+    .label { position: absolute; top: 8px; padding: 2px 8px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); font-size: 12px; pointer-events: none; }
+    #stats { overflow-x: auto; background: var(--panel); border-top: 1px solid var(--line); }
+    table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+    th, td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+    th:first-child, td:first-child { text-align: left; color: var(--muted); }
+    td.bad { color: var(--bad); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>縫合參數比較</h1>
+    <span id="name" style="color:var(--muted)"></span>
+    <span style="flex:1"></span>
+    <button id="wire" aria-pressed="false">網格線</button>
+    <button id="bodyBtn" aria-pressed="true">人體</button>
+    <button id="stretch" aria-pressed="false">拉長上色</button>
+  </header>
+  <div id="view"></div>
+  <div id="stats"><table id="table"></table></div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+
+    const ROOT = "../../";
+    const params = new URLSearchParams(location.search);
+    const G = params.get("g") || "ai4bit_v2_g06_red_tee";
+    const SHOW = (params.get("v") || "baseline,limit5,limit2_w100,limit2_w100_g005").split(",");
+    const DIR = `${ROOT}output/chatgarment/${G}/`;
+    const $ = (id) => document.getElementById(id);
+    $("name").textContent = G;
+
+    const view = $("view");
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setScissorTest(true);
+    view.appendChild(renderer.domElement);
+    const camera = new THREE.PerspectiveCamera(28, 1, 1, 2000);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    const loader = new OBJLoader();
+    const load = (url, s) => loader.loadAsync(url).then((o) => {
+      let g; o.traverse((c) => { if (c.isMesh && !g) g = c.geometry; });
+      g.scale(s, s, s); g.computeVertexNormals(); return g;
+    });
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x8c8c8c, roughness: 0.9 });
+    const clothMat = new THREE.MeshStandardMaterial({ color: 0xd9534f, roughness: 0.8, side: THREE.DoubleSide });
+    const stretchMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    const wireMat = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true, transparent: true, opacity: 0.2 });
+    const state = { wire: false, body: true, stretch: false };
+    const scenes = [];
+    const all = { bodies: [], cloth: [], wires: [] };
+
+    // 拉長上色：每個三角形和縫合前（box mesh）比，面積放大越多越紅。
+    // box mesh 縫線附近的「橋」本來就被拉長，所以拿縫合前的三角形當基準不準；改用 2D 版片（UV）的面積比例。
+    function stretchColors(geom) {
+      const pos = geom.attributes.position, uv = geom.attributes.uv;
+      const n = pos.count / 3, area3 = new Float32Array(n), area2 = new Float32Array(n);
+      const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+      for (let i = 0; i < n; i++) {
+        a.fromBufferAttribute(pos, 3 * i); b.fromBufferAttribute(pos, 3 * i + 1); c.fromBufferAttribute(pos, 3 * i + 2);
+        area3[i] = b.sub(a).cross(c.sub(a)).length() / 2;
+        const u0 = uv.getX(3 * i), v0 = uv.getY(3 * i);
+        area2[i] = Math.abs((uv.getX(3 * i + 1) - u0) * (uv.getY(3 * i + 2) - v0) - (uv.getX(3 * i + 2) - u0) * (uv.getY(3 * i + 1) - v0)) / 2;
+      }
+      // UV 的整體縮放未知：用中位數的比例當作「沒拉長」
+      const ratios = Array.from(area3, (x, i) => x / Math.max(area2[i], 1e-12)).sort((p, q) => p - q);
+      const med = ratios[Math.floor(n / 2)];
+      const col = new Float32Array(pos.count * 3);
+      for (let i = 0; i < n; i++) {
+        const r = area3[i] / Math.max(area2[i], 1e-12) / med;   // 1 ＝ 跟版片一樣
+        const t = Math.min(1, Math.max(0, (r - 1) / 0.5));       // 面積大 50% 以上全紅
+        const rgb = [0.85, 0.85 - 0.7 * t, 0.85 - 0.7 * t];
+        for (let k = 0; k < 3; k++) col.set(rgb, (3 * i + k) * 3);
+      }
+      geom.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    }
+
+    async function main() {
+      const stats = await fetch(`${DIR}sew_experiment.json`).then((r) => r.json()).catch(() => ({}));
+      const [bodyGeom, ...geoms] = await Promise.all([
+        load(`${ROOT}third_party/GarmentCodeRC/assets/bodies/mean_male.obj`, 100),
+        ...SHOW.map((v) => load(`${DIR}${G}_sewn_${v}.obj`, 1)),
+      ]);
+      geoms.forEach((g, i) => {
+        stretchColors(g);
+        const s = new THREE.Scene();
+        s.add(new THREE.HemisphereLight(0xffffff, 0x666666, 2.2));
+        const d = new THREE.DirectionalLight(0xffffff, 1.5); d.position.set(80, 200, 160); s.add(d);
+        const body = new THREE.Mesh(bodyGeom, bodyMat), cloth = new THREE.Mesh(g, clothMat), wire = new THREE.Mesh(g, wireMat);
+        wire.visible = false;
+        s.add(body, cloth, wire);
+        all.bodies.push(body); all.cloth.push(cloth); all.wires.push(wire);
+        scenes.push(s);
+        const lab = document.createElement("span");
+        lab.className = "label"; lab.style.left = `calc(${(100 * i) / geoms.length}% + 8px)`; lab.textContent = SHOW[i];
+        view.appendChild(lab);
+      });
+      const box = new THREE.Box3(); geoms.forEach((g) => { g.computeBoundingBox(); box.union(g.boundingBox); });
+      const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+      controls.target.copy(c);
+      camera.position.set(c.x, c.y + 5, c.z + Math.max(size.x, size.y) * 3.2);
+      controls.update();
+
+      const keys = ["領口縫合後 cm", "領口拉長 %", "所有邊：拉長超過 10% 的比例 %", "所有邊：最大拉長 %", "在身體裡的頂點 %", "衣服最高點 y cm", "下襬 y cm"];
+      const bad = { "領口拉長 %": 10, "所有邊：拉長超過 10% 的比例 %": 3, "在身體裡的頂點 %": 0.5 };
+      $("table").innerHTML = `<tr><th></th>${SHOW.map((v) => `<th>${v}</th>`).join("")}</tr>` + keys.map((k) =>
+        `<tr><td>${k}</td>${SHOW.map((v) => { const x = stats[v]?.[k]; return `<td class="${bad[k] !== undefined && x > bad[k] ? "bad" : ""}">${x ?? "—"}</td>`; }).join("")}</tr>`).join("");
+    }
+
+    function toggle(id, key, apply) {
+      $(id).addEventListener("click", () => { state[key] = !state[key]; $(id).setAttribute("aria-pressed", state[key]); apply(); });
+    }
+    toggle("wire", "wire", () => all.wires.forEach((w) => (w.visible = state.wire)));
+    toggle("bodyBtn", "body", () => all.bodies.forEach((b) => (b.visible = state.body)));
+    toggle("stretch", "stretch", () => all.cloth.forEach((m) => (m.material = state.stretch ? stretchMat : clothMat)));
+
+    function resize() {
+      const r = view.getBoundingClientRect();
+      renderer.setSize(r.width, r.height, false);
+      camera.aspect = r.width / Math.max(1, SHOW.length) / r.height;
+      camera.updateProjectionMatrix();
+    }
+    new ResizeObserver(resize).observe(view);
+    renderer.setAnimationLoop(() => {
+      controls.update();
+      const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight, n = scenes.length || 1;
+      scenes.forEach((s, i) => {
+        renderer.setViewport((i * w) / n, 0, w / n, h);
+        renderer.setScissor((i * w) / n, 0, w / n, h);
+        renderer.render(s, camera);
+      });
+    });
+    main().catch((e) => { $("name").textContent = `載入失敗：${e.message}`; });
+  </script>
+</body>
+</html>
