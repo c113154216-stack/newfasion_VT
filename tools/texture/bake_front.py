@@ -192,11 +192,72 @@ def photo_front_neckline(rgb, mask, n=41):
     outer_y = a_o * (gx - mid) ** 2 + c_o
     if len(inner) >= 0.3 * neck_w:
         a_i, c_i = sym_fit(np.array(inner, float))
-        inner_y = a_i * (gx - mid) ** 2 + c_i
         rib = float(c_o - c_i)
     else:
-        inner_y, rib = outer_y, 0.0
-    return np.column_stack([gx, inner_y]), (path[:, 0], path[:, 1]), (L_snp, R_snp), rib, np.column_stack([gx, outer_y])
+        a_i, c_i, rib = a_o, c_o, 0.0
+    # 對稱曲線只當參考；真正的線照照片走（領口會有一點歪、不對稱）
+    real = trace_ring(L, L_snp, R_snp, mid, a_i, c_i)
+    return real, (path[:, 0], path[:, 1]), (L_snp, R_snp), rib, np.column_stack([gx, outer_y])
+
+
+def trace_ring(L, L_snp, R_snp, mid, a, c, n_theta=140, prior_w=0.8, jump_w=3.0):
+    """從開口中心往外放射掃描，沿角度用動態規劃找一條連續的暗線（羅紋內緣），回傳照片上的點（左→右）。
+    逐行往下找在領口兩側（接近垂直）會掃不到，放射掃描才抓得到。
+    參考曲線 y＝a·(x−mid)²＋c 只用來限制搜尋範圍、讓結果不要跳到別條線；最後只做輕微平滑，保留真實的不規則。"""
+    cy = (min(L_snp[1], R_snp[1]) + c) / 2                      # 開口中心
+    center = np.array([mid, cy])
+    # 角度（影像座標 y 朝下，90° 是正下方）：左頸側點約 210°，經過正下方 90°，到右頸側點約 −30°
+    th0 = np.arctan2(L_snp[1] - cy, L_snp[0] - mid) % (2 * np.pi)
+    th1 = np.arctan2(R_snp[1] - cy, R_snp[0] - mid)
+    if th1 > np.pi / 2:
+        th1 -= 2 * np.pi
+    thetas = np.linspace(th0, th1, n_theta)
+    # 參考曲線在每個角度上的半徑
+    def prior_r(t):
+        rs = np.linspace(1, 2.5 * (R_snp[0] - L_snp[0]), 600)
+        x, y = mid + rs * np.cos(t), cy + rs * np.sin(t)
+        return rs[np.argmin(np.abs(y - (a * (x - mid) ** 2 + c)))]
+    H, W = L.shape
+    cands = []
+    for t in thetas:
+        r0 = prior_r(t)
+        rs = np.arange(max(2, 0.85 * r0), 1.25 * r0 + 1)   # 只在參考曲線附近找：開口裡還有後領羅紋的交界，範圍太大會跳過去
+        x, y = mid + rs * np.cos(t), cy + rs * np.sin(t)
+        ok = (x >= 0) & (x < W - 1) & (y >= 0) & (y < H - 1)
+        if ok.sum() < 4:
+            cands.append([(r0, 0.0, r0)])
+            continue
+        prof = cv2.remap(L.astype(np.float32), x[ok].astype(np.float32).reshape(1, -1),
+                         y[ok].astype(np.float32).reshape(1, -1), cv2.INTER_LINEAR)[0]
+        # 內緣是明暗交界：開口裡的後片內側較暗，往外到羅紋變亮 → 找沿射線往外「亮度上升」最明顯的地方
+        grad = np.gradient(ndimage.gaussian_filter1d(prof, 1.0))
+        pk, pr = find_peaks(grad, prominence=1.0) if len(prof) > 3 else ([], {"prominences": []})
+        cands.append([(rs[ok][p], q, r0) for p, q in zip(pk, pr["prominences"])] or [(r0, 0.0, r0)])
+    # 動態規劃：強度大、靠近參考、相鄰角度半徑不要跳
+    score = [np.array([q - prior_w * abs(r - r0) for r, q, r0 in cands[0]])]
+    back = []
+    for i in range(1, len(cands)):
+        prev_r = np.array([r for r, _, _ in cands[i - 1]])
+        cur, bk = [], []
+        for r, q, r0 in cands[i]:
+            tot = score[-1] - jump_w * np.abs(prev_r - r)
+            j = int(np.argmax(tot)); bk.append(j)
+            cur.append(tot[j] + q - prior_w * abs(r - r0))
+        score.append(np.array(cur)); back.append(bk)
+    j = int(np.argmax(score[-1])); radii = []
+    for i in range(len(cands) - 1, -1, -1):
+        radii.append(cands[i][j][0])
+        if i:
+            j = back[i - 1][j]
+    # 只保留跟參考曲線之間「大尺度」的偏差（整體歪一邊、左右不對稱），細碎的跳動（領標殘影、皺褶）抹掉
+    radii = np.array(radii[::-1], float)
+    prior = np.array([r0 for *_, r0 in (cands[i][0] for i in range(len(cands)))])
+    dev = ndimage.median_filter(radii - prior, 15, mode="nearest")
+    dev = ndimage.gaussian_filter1d(dev, 6, mode="nearest")
+    radii = prior + dev
+    pts = center + radii[:, None] * np.column_stack([np.cos(thetas), np.sin(thetas)])
+    pts[0], pts[-1] = L_snp, R_snp                                # 兩端固定在頸側點
+    return pts
 
 
 def mesh_front_neckline(folder, name):
@@ -277,9 +338,11 @@ def align(xy, faces, mask_p, neck=None, neck_repeat=4):
     dst = contour(mask_p)
     if neck is not None:
         idx, curve = neck
-        gx = g[idx, 0]
-        t = (gx - gx.min()) / max(gx.max() - gx.min(), 1e-9)   # 左頸側點 0 → 右頸側點 1
-        ct = (curve[:, 0] - curve[0, 0]) / (curve[-1, 0] - curve[0, 0])
+        idx = idx[np.argsort(g[idx, 0])]                         # 網格前領：左 → 右
+        def arclen(p):
+            d = np.r_[0, np.cumsum(np.linalg.norm(np.diff(p, axis=0), axis=1))]
+            return d / d[-1]
+        t, ct = arclen(g[idx]), arclen(curve)                    # 兩邊都用「沿線長度的比例」對應
         target = np.column_stack([np.interp(t, ct, curve[:, 0]), np.interp(t, ct, curve[:, 1])])
         src = np.vstack([src] + [g[idx]] * neck_repeat)
         dst = np.vstack([dst] + [target] * neck_repeat)
