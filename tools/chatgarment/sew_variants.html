@@ -135,7 +135,7 @@
       camera.position.set(c.x, c.y + 5, c.z + Math.max(size.x, size.y) * 3.2);
       controls.update();
 
-      const keys = ["領口縫合後 cm", "領口拉長 %", "所有邊：拉長超過 10% 的比例 %", "所有邊：最大拉長 %", "在身體裡的頂點 %", "衣服最高點 y cm", "下襬 y cm"];
+      const keys = ["領口縫合後 cm", "領口拉長 %", "所有邊：拉長超過 10% 的比例 %", "所有邊：最大拉長 %", "在身體裡的頂點 %", "衣服最高點 y cm", "下襬 y cm", "前中心最高 y cm", "前中心最低 y cm"];
       const bad = { "領口拉長 %": 10, "所有邊：拉長超過 10% 的比例 %": 3, "在身體裡的頂點 %": 0.5 };
       $("table").innerHTML = `<tr><th></th>${SHOW.map((v) => `<th>${v}</th>`).join("")}</tr>` + keys.map((k) =>
         `<tr><td>${k}</td>${SHOW.map((v) => { const x = stats[v]?.[k]; return `<td class="${bad[k] !== undefined && x > bad[k] ? "bad" : ""}">${x ?? "—"}</td>`; }).join("")}</tr>`).join("");
