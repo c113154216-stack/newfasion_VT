@@ -293,6 +293,8 @@
     }
 
     // ---------- 控制 ----------
+    // ?items=名稱:標籤,名稱:標籤 ：改成比自訂的一組衣服（例如低領實驗）
+    if (q.get("items")) GARMENTS.splice(0, GARMENTS.length, ...q.get("items").split(",").map((x) => x.split(":")));
     if (ONLY) GARMENTS.splice(0, GARMENTS.length, ...GARMENTS.filter(([n]) => ONLY.includes(n)));
     document.getElementById("tagL").textContent = SIDES[0].key;
     document.getElementById("tagR").textContent = SIDES[1].key;
