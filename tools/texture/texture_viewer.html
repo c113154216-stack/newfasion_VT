@@ -1,0 +1,152 @@
+<!doctype html>
+<!--
+  貼好顏色的衣服 3D 檢視：讀 bake_front.py 輸出的 output/texture_bake/<衣服>/<衣服>.obj、.mtl、texture.png。
+  從 newfashion_VT 根目錄開伺服器：python -m http.server 8766
+  開 http://localhost:8766/tools/texture/texture_viewer.html?m=衣服1,衣服2
+-->
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>貼圖檢視</title>
+  <script type="importmap">
+    { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    } }
+  </script>
+  <style>
+    :root { --bg: #f4f4f2; --panel: #fff; --line: #dcdcd8; --text: #1d1d1b; --muted: #66665f; --accent: #2f6fd6; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) { --bg: #1b1d21; --panel: #23262c; --line: #3a3f47; --text: #e6e6e6; --muted: #9aa0a6; --accent: #5b9bff; }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.5 "Microsoft JhengHei", system-ui, sans-serif; }
+    body { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100dvh; overflow: hidden; }
+    header { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+    header h1 { font-size: 14px; margin: 0 8px 0 0; }
+    button { font: inherit; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+    button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+    #view { position: relative; min-height: 0; }
+    #view canvas { display: block; width: 100%; height: 100%; }
+    .label { position: absolute; top: 8px; padding: 2px 8px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); font-size: 12px; pointer-events: none; }
+    #status { position: absolute; bottom: 8px; left: 8px; color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>貼圖檢視</h1>
+    <span style="flex:1"></span>
+    <div id="views" role="group" aria-label="視角">
+      <button data-az="0" aria-pressed="true">正面</button>
+      <button data-az="90" aria-pressed="false">側面</button>
+      <button data-az="180" aria-pressed="false">背面</button>
+    </div>
+    <button id="bodyBtn" aria-pressed="true">人體</button>
+  </header>
+  <div id="view"><span id="status">載入中…</span></div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+    import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
+
+    const ROOT = "../../";
+    const q = new URLSearchParams(location.search);
+    const NAMES = (q.get("m") || "aibf16_3090_g06_red_tee").split(",");
+    const LABELS = (q.get("l") || "").split(",");
+    const $ = (id) => document.getElementById(id);
+
+    const view = $("view");
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.setScissorTest(true);
+    view.prepend(renderer.domElement);
+    const camera = new THREE.PerspectiveCamera(26, 1, 1, 2000);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xb9b4ab, roughness: 0.9 });
+    const bodies = [];
+    const scenes = [];
+
+    async function loadTextured(name) {
+      const dir = `${ROOT}output/texture_bake/${name}/`;
+      const mtl = await new MTLLoader().setPath(dir).loadAsync(`${name}.mtl`);
+      mtl.preload();
+      const obj = await new OBJLoader().setMaterials(mtl).setPath(dir).loadAsync(`${name}.obj`);
+      obj.traverse((o) => {
+        if (!o.isMesh) return;
+        o.geometry.computeVertexNormals();
+        // MTL 預設是金屬感、沒有環境光反射時會很暗：改成布料的霧面材質
+        const map = o.material.map;
+        if (map) map.colorSpace = THREE.SRGBColorSpace;
+        o.material = new THREE.MeshStandardMaterial({ map, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+      });
+      return obj;
+    }
+
+    async function main() {
+      const body = await new OBJLoader().loadAsync(`${ROOT}third_party/GarmentCodeRC/assets/bodies/mean_male.obj`);
+      body.scale.setScalar(100);
+      body.traverse((o) => { if (o.isMesh) { o.material = bodyMat; o.geometry.computeVertexNormals(); } });
+      const garments = await Promise.all(NAMES.map(loadTextured));
+      const box = new THREE.Box3();
+      garments.forEach((g, i) => {
+        const s = new THREE.Scene();
+        s.add(new THREE.HemisphereLight(0xffffff, 0x777777, 2.0));
+        const d = new THREE.DirectionalLight(0xffffff, 1.4); d.position.set(60, 200, 200); s.add(d);
+        const d2 = new THREE.DirectionalLight(0xffffff, 0.8); d2.position.set(-60, 120, -200); s.add(d2);
+        const b = body.clone(); bodies.push(b);
+        s.add(b, g);
+        scenes.push(s);
+        box.union(new THREE.Box3().setFromObject(g));
+        const lab = document.createElement("span");
+        lab.className = "label"; lab.style.left = `calc(${(100 * i) / garments.length}% + 8px)`;
+        lab.textContent = LABELS[i] || NAMES[i];
+        view.appendChild(lab);
+      });
+      const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+      controls.target.copy(c);
+      camera.position.set(c.x, c.y + 5, c.z + Math.max(size.x, size.y) * 3.0);
+      controls.update();
+      resize();
+      $("status").textContent = "拖曳旋轉（同步）、滾輪縮放";
+    }
+
+    $("views").addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      $("views").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      const t = controls.target, off = camera.position.clone().sub(t);
+      const r = Math.hypot(off.x, off.z), az = (Number(b.dataset.az) * Math.PI) / 180;
+      camera.position.set(t.x + r * Math.sin(az), camera.position.y, t.z + r * Math.cos(az));
+      controls.update();
+    });
+    $("bodyBtn").addEventListener("click", () => {
+      const on = $("bodyBtn").getAttribute("aria-pressed") !== "true";
+      $("bodyBtn").setAttribute("aria-pressed", on);
+      bodies.forEach((b) => (b.visible = on));
+    });
+
+    function resize() {
+      const r = view.getBoundingClientRect();
+      renderer.setSize(r.width, r.height, false);
+      camera.aspect = r.width / Math.max(1, NAMES.length) / r.height;
+      camera.updateProjectionMatrix();
+    }
+    new ResizeObserver(resize).observe(view);
+    renderer.setAnimationLoop(() => {
+      controls.update();
+      const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight, n = scenes.length || 1;
+      scenes.forEach((s, i) => {
+        renderer.setViewport((i * w) / n, 0, w / n, h);
+        renderer.setScissor((i * w) / n, 0, w / n, h);
+        renderer.render(s, camera);
+      });
+    });
+    main().catch((e) => { $("status").textContent = `載入失敗：${e.message}`; });
+  </script>
+</body>
+</html>
