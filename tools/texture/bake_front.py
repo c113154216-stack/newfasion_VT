@@ -31,6 +31,7 @@ import numpy as np
 from PIL import Image
 from scipy.interpolate import RBFInterpolator
 from scipy import ndimage
+from scipy.signal import find_peaks
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
@@ -117,6 +118,94 @@ def clean_collar(rgb, mask, base, top=0.2, half_width=0.2, max_diff=40.0):
     return cv2.inpaint(rgb, defect * 255, 7, cv2.INPAINT_TELEA), defect
 
 
+def photo_front_neckline(rgb, mask, n=41):
+    """照片上的前領線：兩個頸側點之間，羅紋外緣那條深色縫線。
+    平拍照的輪廓最上面是後領，前領在更下面（中間看得到後片內側和領標），只靠外輪廓對齊會把網格的前領
+    對到後領，羅紋就貼在網格領口下面一截。這裡在兩個頸側點之間逐行往下找暗線，沿行用動態規劃選一條
+    連續的線，再用左右對稱的二次曲線擬合（單邊的皺褶陰影會被剔除）。
+    外緣找到後再往上找緊鄰的暗線（羅紋內緣），回傳的曲線是內緣，也就是開口的邊。
+    建議用 clean_collar 清過領標的照片。回傳 ((n,2) 像素座標 左→右, 偵測點, 頸側點, 羅紋寬)；找不到回傳 None。"""
+    ys, xs = np.nonzero(mask)
+    x0, x1 = xs.min(), xs.max()
+    w, cx = x1 - x0, (x0 + x1) / 2
+    top = np.full(mask.shape[1], np.nan)
+    cols = np.where(mask.any(axis=0))[0]
+    top[cols] = mask[:, cols].argmax(axis=0)
+    def snp(a, b):
+        xr = np.arange(int(cx + a * w), int(cx + b * w))
+        i = np.nanargmin(top[xr]); return np.array([xr[i], top[xr[i]]], float)
+    L_snp, R_snp = snp(-0.3, -0.03), snp(0.03, 0.3)
+    neck_w = R_snp[0] - L_snp[0]
+    if neck_w < 0.08 * w:
+        return None
+    mid = (L_snp[0] + R_snp[0]) / 2
+    L = cv2.GaussianBlur(cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)[:, :, 0].astype(float), (5, 5), 1.2)
+    y_max = int(max(L_snp[1], R_snp[1]) + 1.1 * neck_w)
+    xs_ = np.arange(int(L_snp[0]) + 3, int(R_snp[0]) - 2)
+    cands = []   # 每一行的候選暗線 (y, 強度)
+    for x in xs_:
+        t = int(top[x]) + 3
+        col = L[t:y_max, x] if t < y_max else np.array([])
+        pk, prop = find_peaks(-col, prominence=6) if len(col) > 3 else ([], {"prominences": []})
+        cands.append([(t + p, pr) for p, pr in zip(pk, prop["prominences"])])
+    # 動態規劃：沿著行選一條「強度大、上下跳動小」的線；越靠中間越偏好下面那條（羅紋外緣在內緣下面）
+    best = [dict() for _ in xs_]
+    for i, cs in enumerate(cands):
+        for y, pr in cs:
+            score = pr + 0.05 * (y - top[xs_[i]])
+            prev = max(((s - 1.5 * abs(y - py), py) for py, (s, _) in best[i - 1].items()), default=(0, None)) if i else (0, None)
+            best[i][y] = (score + max(prev[0], 0), prev[1] if prev[0] > 0 else None)
+    # 回溯
+    path, i = [], len(xs_) - 1
+    while i >= 0 and not best[i]:
+        i -= 1
+    if i < 0:
+        return None
+    y = max(best[i], key=lambda k: best[i][k][0])
+    while i >= 0 and y is not None:
+        path.append((xs_[i], y)); y = best[i][y][1] if y in best[i] else None; i -= 1
+    path = np.array(path[::-1], float)
+    if len(path) < 0.4 * neck_w:
+        return None
+    # 左右對稱的二次曲線 y = a·(x−中線)² + c，兩個頸側點加大權重，剔除離群點（單邊的皺褶）
+    u = np.r_[(path[:, 0] - mid) ** 2, [(L_snp[0] - mid) ** 2] * 10, [(R_snp[0] - mid) ** 2] * 10]
+    yy = np.r_[path[:, 1], [L_snp[1]] * 10, [R_snp[1]] * 10]
+    keep = np.ones(len(u), bool)
+    for _ in range(4):
+        a, c = np.polyfit(u[keep], yy[keep], 1)
+        res = np.abs(a * u + c - yy)
+        keep = res < max(3 * np.median(res[keep]), 2.5); keep[-20:] = True
+    # 羅紋寬度：外緣上方緊鄰的那條暗線是羅紋內緣（開口的邊）。衣服版片沒有另外做羅紋，
+    # 前片的邊緣就是開口，所以要對到內緣，羅紋才會成為網格領口邊上的那一圈
+    widths = []
+    for (x, y_out) in path:
+        i = int(x - xs_[0])
+        above = [y_out - y for y, _ in cands[i] if 3 <= y_out - y <= 0.25 * neck_w]
+        if above:
+            widths.append(min(above))
+    rib = float(np.median(widths)) if len(widths) >= 5 else 0.0
+    gx = np.linspace(L_snp[0], R_snp[0], n)
+    gy = a * (gx - mid) ** 2 + c
+    if rib > 0:
+        # 沿曲線法線往開口內側（上方）平移羅紋寬度；兩端是頸側點，不動
+        dy = 2 * a * (gx - mid)
+        nrm = np.column_stack([dy, -np.ones_like(gx)]) / np.sqrt(dy ** 2 + 1)[:, None]
+        fade = np.sin(np.linspace(0, np.pi, n))
+        inner = np.column_stack([gx, gy]) + nrm * rib * fade[:, None]
+        return inner, (path[:, 0], path[:, 1]), (L_snp, R_snp), rib
+    return np.column_stack([gx, gy]), (path[:, 0], path[:, 1]), (L_snp, R_snp), rib
+
+
+def mesh_front_neckline(folder, name):
+    """網格前片的領口頂點（box mesh 的頂點編號）。GarmentCode 在 *_vertex_labels.yaml 標了 left_collar／
+    right_collar（前後片都有），再用 *_sim_segmentation.txt 留下屬於前片的。"""
+    import yaml
+    labels = yaml.safe_load((folder / f"{name}_vertex_labels.yaml").read_text())
+    seg = (folder / f"{name}_sim_segmentation.txt").read_text().splitlines()
+    idx = [i for k in ("left_collar", "right_collar") for i in labels.get(k, [])]
+    return np.array(sorted({i for i in idx if "ftorso" in seg[i]}), int)
+
+
 # ---------- 2、3. 平放與對齊 ----------
 def raster(points, faces, shape):
     mask = np.zeros(shape, np.uint8)
@@ -171,9 +260,11 @@ def armpits(c, nx, ny):
     return {i for i, _ in found.values()}
 
 
-def align(xy, faces, mask_p):
+def align(xy, faces, mask_p, neck=None, neck_repeat=4):
     """xy：所有頂點的 2D 投影（x 右、y 上）。輪廓用全部三角形（前片＋後片）投影出來，
-    和平拍照一樣會從領口露出後領。回傳每個頂點在照片上的像素座標。"""
+    和平拍照一樣會從領口露出後領。回傳每個頂點在照片上的像素座標。
+    neck：(網格前領頂點編號, 照片前領曲線 (n,2))。有給的話，前領頂點依左右位置對到照片曲線上，
+    加進薄板樣條的對應點（重複 neck_repeat 次加重），讓羅紋領口圈在網格領口上。"""
     ys, xs = np.nonzero(mask_p)
     p0, p1 = np.array([xs.min(), ys.min()]), np.array([xs.max(), ys.max()])
     g = xy * [1, -1]  # 影像座標 y 朝下
@@ -181,6 +272,14 @@ def align(xy, faces, mask_p):
     g = p0 + (g - g0) / (g1 - g0) * (p1 - p0)  # 外框對齊
     src = contour(raster(g, faces, mask_p.shape))
     dst = contour(mask_p)
+    if neck is not None:
+        idx, curve = neck
+        gx = g[idx, 0]
+        t = (gx - gx.min()) / max(gx.max() - gx.min(), 1e-9)   # 左頸側點 0 → 右頸側點 1
+        ct = (curve[:, 0] - curve[0, 0]) / (curve[-1, 0] - curve[0, 0])
+        target = np.column_stack([np.interp(t, ct, curve[:, 0]), np.interp(t, ct, curve[:, 1])])
+        src = np.vstack([src] + [g[idx]] * neck_repeat)
+        dst = np.vstack([dst] + [target] * neck_repeat)
     tps = RBFInterpolator(src, dst, kernel="thin_plate_spline", smoothing=5.0)
     return tps(g), src, dst
 
@@ -223,6 +322,8 @@ def main():
     ap.add_argument("--method", choices=["tps", "panel"], default="tps",
                     help="tps＝整件彎曲貼合輪廓（預設）；panel＝每片版片各自對齊、花紋不變形"
                          "（實驗中：網格和照片形狀要很接近才對得上，見 align_panels.py）")
+    ap.add_argument("--no-neckline", action="store_true",
+                    help="不偵測照片的前領線，只用外輪廓對齊（舊做法）")
     ap.add_argument("--keep-collar", action="store_true",
                     help="不清理領口附近的領標和陰影（預設會清理，見 clean_collar）")
     args = ap.parse_args()
@@ -255,7 +356,16 @@ def main():
         print(f"版片對齊：重疊率 IoU {info['iou']:.3f}；每公分 {info['px_per_cm']:.1f} 像素；"
               f"袖子轉 {info['sleeve_deg'][0]:.1f}°／{info['sleeve_deg'][1]:.1f}°")
     else:
-        photo_px, src, dst = align(box_v[:, :2], faces, mask_p)
+        neck = None
+        if not args.no_neckline:
+            found = photo_front_neckline(photo, mask_p)
+            idx = mesh_front_neckline(folder, name)
+            if found is not None and len(idx) >= 4:
+                neck = (idx, found[0])
+                print(f"前領線：照片前中心 y＝{found[0][len(found[0]) // 2, 1]:.0f}（羅紋寬 {found[3]:.0f} 像素）；網格前領頂點 {len(idx)} 個")
+            else:
+                print("前領線：沒找到，只用外輪廓對齊")
+        photo_px, src, dst = align(box_v[:, :2], faces, mask_p, neck)
         corner_px = photo_px[faces]
 
     # 4. 烘焙
