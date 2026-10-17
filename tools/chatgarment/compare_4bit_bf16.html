@@ -78,6 +78,11 @@
       <button data-mode="split" aria-pressed="true">左右並排</button>
       <button data-mode="overlay" aria-pressed="false">疊在一起</button>
     </div>
+    <div class="seg" id="views" role="group" aria-label="視角">
+      <button data-az="0" aria-pressed="true">正面</button>
+      <button data-az="90" aria-pressed="false">側面</button>
+      <button data-az="180" aria-pressed="false">背面</button>
+    </div>
     <div class="seg">
       <button id="wire" aria-pressed="false">網格線</button>
       <button id="bodyBtn" aria-pressed="true">人體</button>
@@ -114,10 +119,14 @@
       ["g07_grey_stripe_tee", "灰條紋 T"],
       ["g08_white_tee", "白 T"],
     ];
+    // 預設比 4-bit 和 bf16；網址可以改成比任兩組網格，例如
+    // ?a=aibf16_3090&la=原本&ra=bf16_3090&b=aibf16_3090_neck&lb=領口校正&rb=bf16_3090
+    const q = new URLSearchParams(location.search);
     const SIDES = [
-      { key: "4bit", tag: "ai4bit_v2", results: "4bit_v2", color: 0x5b9bff },
-      { key: "bf16", tag: "aibf16_3090", results: "bf16_3090", color: 0xff9a4d },
+      { key: q.get("la") || "4bit", tag: q.get("a") || "ai4bit_v2", results: q.get("ra") || "4bit_v2", color: 0x5b9bff },
+      { key: q.get("lb") || "bf16", tag: q.get("b") || "aibf16_3090", results: q.get("rb") || "bf16_3090", color: 0xff9a4d },
     ];
+    const ONLY = q.get("only") ? q.get("only").split(",") : null;
     const $ = (id) => document.getElementById(id);
     const state = { mode: "split", wire: false, body: true, current: null };
 
@@ -229,7 +238,9 @@
     async function readInfo(side, name) {
       const dir = `${ROOT}results/chatgarment_ai/${side.results}/${name}`;
       const [design, meta, out] = await Promise.all([
-        loadText(`${dir}/design_upper.yaml`).then((t) => yaml.load(t).design),
+        // 優先讀生成網格時實際用的款式（有校正過的領深），沒有才讀 AI 的原始輸出
+        loadText(`${ROOT}output/chatgarment/${side.tag}_${name}/design_used.yaml`)
+          .catch(() => loadText(`${dir}/design_upper.yaml`)).then((t) => yaml.load(t).design),
         loadText(`${dir}/meta.json`).then(JSON.parse).catch(() => ({})),
         loadText(`${dir}/output.txt`).catch(() => ""),
       ]);
@@ -252,12 +263,14 @@
         ["寬鬆度", (d) => num(v(d, "shirt.width"))],
         ["下襬外擴", (d) => num(v(d, "shirt.flare"))],
         ["領型", (d) => v(d, "collar.f_collar")],
+        ["前領深參數", (d) => num(v(d, "collar.fc_depth"))],
+        ["後領深參數", (d) => num(v(d, "collar.bc_depth"))],
         ["領子配件", (d) => v(d, "collar.component.style") ?? "無"],
         ["無袖", (d) => (v(d, "sleeve.sleeveless") ? "是" : "否")],
         ["袖長", (d) => num(v(d, "sleeve.length"))],
         ["袖口寬", (d) => num(v(d, "sleeve.end_width"))],
       ];
-      const html = [`<tr><th></th><th style="color:var(--c4)">4-bit</th><th style="color:var(--c16)">bf16</th></tr>`];
+      const html = [`<tr><th></th><th style="color:var(--c4)">${SIDES[0].key}</th><th style="color:var(--c16)">${SIDES[1].key}</th></tr>`];
       for (const [label, f] of rows) {
         const a = f(infos[0].design), b = f(infos[1].design);
         html.push(`<tr class="${a !== b ? "diff" : ""}"><th>${label}</th><td class="c4">${a}</td><td class="c16">${b}</td></tr>`);
@@ -280,6 +293,10 @@
     }
 
     // ---------- 控制 ----------
+    if (ONLY) GARMENTS.splice(0, GARMENTS.length, ...GARMENTS.filter(([n]) => ONLY.includes(n)));
+    document.getElementById("tagL").textContent = SIDES[0].key;
+    document.getElementById("tagR").textContent = SIDES[1].key;
+    document.querySelector("header h1").textContent = `${SIDES[0].key} 與 ${SIDES[1].key} 網格對照`;
     $("garments").innerHTML = GARMENTS.map(([n, l]) => `<button data-name="${n}" aria-pressed="false">${l}</button>`).join("");
     $("garments").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) load(b.dataset.name); });
     $("mode").addEventListener("click", (e) => {
@@ -297,6 +314,16 @@
         meshes.forEach((m) => { if (test(m)) m.visible = state[key]; });
       });
     }
+    // 視角：繞衣服中心水平轉到指定方位，距離和高度不變
+    $("views").addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      $("views").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      const t = controls.target, off = camera.position.clone().sub(t);
+      const r = Math.hypot(off.x, off.z), az = (Number(b.dataset.az) * Math.PI) / 180;
+      camera.position.set(t.x + r * Math.sin(az), camera.position.y, t.z + r * Math.cos(az));
+      controls.update();
+    });
     toggle("wire", "wire", (m) => m.userData.isWire);
     toggle("bodyBtn", "body", (m) => m.userData.isBody);
 
@@ -322,7 +349,7 @@
         renderer.render(scenes.overlay, camera);
       }
     });
-    load(GARMENTS[3][0]);
+    load((GARMENTS[3] || GARMENTS[0])[0]);
   </script>
 </body>
 </html>
