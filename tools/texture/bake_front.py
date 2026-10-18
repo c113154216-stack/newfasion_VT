@@ -260,6 +260,45 @@ def trace_ring(L, L_snp, R_snp, mid, a, c, n_theta=140, prior_w=0.8, jump_w=3.0)
     return pts
 
 
+def neckline_from_opening(opening, rib_px=0.0, n=60):
+    """SAM 切出的領口開口 → 前片領口線。
+    開口的下緣（每一行最下面的點）是羅紋外側的縫線，形狀照照片走（不規則）；
+    前片領口線是羅紋內緣，所以沿法線往開口內側平移羅紋寬度 rib_px（整圈一樣寬）。回傳 (n,2)，左→右。"""
+    ys, xs = np.nonzero(opening)
+    if len(xs) < 20:
+        return None
+    cols = np.arange(xs.min(), xs.max() + 1)
+    bottom = np.array([ys[xs == x].max() if (xs == x).any() else np.nan for x in cols], float)
+    good = ~np.isnan(bottom)
+    bottom = ndimage.median_filter(np.interp(cols, cols[good], bottom[good]), 5, mode="nearest")
+    # 兩端：開口最左、最右那一行往上收到最上面（頸側點附近）
+    left_top, right_top = ys[xs == cols[0]].min(), ys[xs == cols[-1]].min()
+    pts = np.vstack([[cols[0], left_top], np.column_stack([cols, bottom]), [cols[-1], right_top]])
+    d = np.r_[0, np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))]
+    t = np.linspace(0, d[-1], max(n, 200))
+    pts = np.column_stack([np.interp(t, d, pts[:, 0]), np.interp(t, d, pts[:, 1])])
+    if rib_px:
+        # 法線＝切線轉 90°：左→右走時指向開口內側（底部朝上、左側朝右、右側朝左）
+        sm = ndimage.gaussian_filter1d(pts, 4, axis=0, mode="nearest")
+        tan = np.gradient(sm, axis=0)
+        nrm = np.column_stack([tan[:, 1], -tan[:, 0]]) / np.maximum(np.linalg.norm(tan, axis=1), 1e-9)[:, None]
+        pts = pts + nrm * rib_px
+    d = np.r_[0, np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))]
+    t = np.linspace(0, d[-1], n)
+    return np.column_stack([np.interp(t, d, pts[:, 0]), np.interp(t, d, pts[:, 1])])
+
+
+def sam_masks(photo_path):
+    """sam_masks.py 產生的遮罩與羅紋寬度（跟照片同資料夾、檔名接在照片名後面）；沒有就回傳 (None, None, 0)。"""
+    g = photo_path.with_name(f"{photo_path.stem}_garment.png")
+    o = photo_path.with_name(f"{photo_path.stem}_opening.png")
+    load = lambda p: (np.asarray(Image.open(p).convert("L")) > 127) if p.exists() else None
+    import json
+    j = photo_path.with_name(f"{photo_path.stem}_neck.json")
+    rib = (json.loads(j.read_text(encoding="utf-8")).get("rib_px") or 0.0) if j.exists() else 0.0
+    return load(g), load(o), rib
+
+
 def mesh_front_neckline(folder, name):
     """網格前片的領口頂點（box mesh 的頂點編號）。GarmentCode 在 *_vertex_labels.yaml 標了 left_collar／
     right_collar（前後片都有），再用 *_sim_segmentation.txt 留下屬於前片的。"""
@@ -406,8 +445,13 @@ def main():
     front = np.array([any(k in p for k in FRONT_PANELS) for p in panel])
     print(f"照片：{photo_path.name}；前片＋袖子正面 {front.sum()} 個三角形／共 {len(faces)} 個")
 
-    # 1. 去背
-    mask_p = photo_mask(photo)
+    # 1. 去背：有 SAM 的遮罩就用 SAM 的（sam_masks.py），沒有就用 GrabCut
+    sam_garment, sam_opening, sam_rib = sam_masks(photo_path)
+    if sam_garment is not None:
+        mask_p = sam_garment.astype(np.uint8) * 255
+        print("去背：用 SAM 的遮罩")
+    else:
+        mask_p = photo_mask(photo)
     base = np.median(photo[mask_p > 0], axis=0)
     photo_raw, collar_fix = photo, None
     if not args.keep_collar:
@@ -424,8 +468,17 @@ def main():
     else:
         neck = None
         if not args.no_neckline:
-            found = photo_front_neckline(photo, mask_p)
             idx = mesh_front_neckline(folder, name)
+            manual = photo_path.with_name(f"{photo_path.stem}_neckline.json")
+            if manual.exists():
+                # 人工標的前領線（[[x, y], …]，左→右），最準；上架時讓商家確認或修正一次
+                import json
+                found = (np.array(json.loads(manual.read_text(encoding="utf-8")), float), None, None, 0.0)
+                print("前領線：用人工標的線")
+            else:
+                # SAM 的領口開口實測不可靠（羅紋和開口內側同色，tiny、base 都分不開），所以不用；
+                # 改用放射掃描找明暗交界（photo_front_neckline）
+                found = photo_front_neckline(photo, mask_p)
             if found is not None and len(idx) >= 4:
                 neck = (idx, found[0])
                 print(f"前領線：照片前中心 y＝{found[0][len(found[0]) // 2, 1]:.0f}（羅紋寬 {found[3]:.0f} 像素）；網格前領頂點 {len(idx)} 個")
