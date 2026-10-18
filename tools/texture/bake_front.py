@@ -288,6 +288,77 @@ def neckline_from_opening(opening, rib_px=0.0, n=60):
     return np.column_stack([np.interp(t, d, pts[:, 0]), np.interp(t, d, pts[:, 1])])
 
 
+RIB_DEFAULT_RATIO = 0.12   # 照片上量不到羅紋寬度時，用頸寬（左右頸側點距離）的這個比例
+
+
+def neckline_from_keypoints(kp, rgb=None, n=60):
+    """DeepFashion2 短袖上衣關鍵點（garment_keypoints.py）→ 前片領口線。
+    第 2、6 點是左右頸側點，第 3、4、5 點是前領的左、前中心、右。DeepFashion2 把這些點標在
+    領子跟衣身的接縫（羅紋外緣）上，但前片的邊緣是羅紋內緣（開口的邊），所以：
+      1. 穿過五點畫平滑曲線（依弦長參數化的三次樣條）＝羅紋外緣，位置由模型決定
+      2. 沿曲線每一點往開口內側（法線方向）找亮度變化最明顯的邊，取中位數＝羅紋寬度，寬度看照片
+      3. 外緣曲線的深度按比例壓淺，讓前中心上移一個羅紋寬（寬度、U 形不變，兩端在頸側點）＝前片領口線
+    回傳 ((n,2) 左→右, 羅紋寬度像素)。"""
+    from scipy.interpolate import CubicSpline
+    import cv2
+    pts = np.asarray(kp, float)[[1, 2, 3, 4, 5], :2]
+    if pts[0, 0] > pts[-1, 0]:
+        pts = pts[::-1]
+    d = np.r_[0, np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))]
+    if d[-1] <= 0:
+        return None, 0.0
+    outer = CubicSpline(d, pts, bc_type="natural")(np.linspace(0, d[-1], 200))
+    tan = np.gradient(outer, axis=0)
+    # 左→右走時，切線轉 90° 指向開口內側（底部朝上、左側朝右、右側朝左）
+    nrm = np.column_stack([tan[:, 1], -tan[:, 0]]) / np.maximum(np.linalg.norm(tan, axis=1), 1e-9)[:, None]
+    neck_w = float(np.linalg.norm(pts[-1] - pts[0]))
+    rib = RIB_DEFAULT_RATIO * neck_w
+    if rgb is not None:
+        L = cv2.GaussianBlur(cv2.cvtColor(np.ascontiguousarray(rgb), cv2.COLOR_RGB2LAB)[:, :, 0].astype(np.float32), (3, 3), 0.8)
+        rs = np.arange(2, 0.3 * neck_w)
+        found = []
+        for i in range(30, 170, 4):                          # 兩端靠近頸側點的地方羅紋會轉彎，不量
+            x = (outer[i, 0] + nrm[i, 0] * rs).astype(np.float32).reshape(1, -1)
+            y = (outer[i, 1] + nrm[i, 1] * rs).astype(np.float32).reshape(1, -1)
+            prof = cv2.remap(L, x, y, cv2.INTER_LINEAR)[0]
+            g = np.abs(np.gradient(ndimage.gaussian_filter1d(prof, 1.0)))
+            pk, pr = find_peaks(g, prominence=2.0)
+            pk = pk[rs[pk] >= 0.05 * neck_w]                  # 太靠近外緣的是縫線本身
+            if len(pk):
+                found.append(rs[pk[np.argmax(g[pk])]])
+        if len(found) >= 8:
+            m = float(np.median(found))
+            if 0.05 * neck_w <= m <= 0.25 * neck_w:
+                rib = m
+    # 前片領口線＝外緣曲線「壓淺」：橫向位置照外緣走（寬度就是兩個頸側點的距離，U 形不變），
+    # 縱向從兩個頸側點的連線往下量的深度按比例縮小，讓前中心往上移一個羅紋寬。兩端固定在頸側點。
+    # （沿法線平移會讓兩側往內縮、端點離開頸側點；只移三個關鍵點再重畫曲線會變成 V 形）
+    a, b = pts[0], pts[-1]
+    base_y = a[1] + (outer[:, 0] - a[0]) / max(b[0] - a[0], 1e-9) * (b[1] - a[1])   # 頸側點連線
+    depth = outer[:, 1] - base_y
+    cf_depth = float(depth.max())
+    scale = max(cf_depth - rib, 0.3 * cf_depth) / max(cf_depth, 1e-9)
+    inner = np.column_stack([outer[:, 0], base_y + depth * scale])
+    d = np.r_[0, np.cumsum(np.linalg.norm(np.diff(inner, axis=0), axis=1))]
+    t = np.linspace(0, d[-1], n)
+    return np.column_stack([np.interp(t, d, inner[:, 0]), np.interp(t, d, inner[:, 1])]), rib
+
+
+def mask_fit(mask, kp, margin=0.06):
+    """遮罩「漏出去」的比例：25 個關鍵點的凸包往外留 margin（相對衣服大小）當作衣服的大致範圍，
+    遮罩超出這個範圍的面積占遮罩的比例。包到背景或陰影的遮罩這個值會明顯變大。"""
+    import cv2
+    pts = np.asarray(kp, float)[:, :2]
+    hull = cv2.convexHull(pts.astype(np.float32)).reshape(-1, 2)
+    size = float(np.max(np.ptp(pts, axis=0)))
+    region = np.zeros(mask.shape, np.uint8)
+    cv2.fillPoly(region, [np.round(hull).astype(np.int32)], 1)
+    r = max(1, int(margin * size))
+    region = cv2.dilate(region, np.ones((2 * r + 1, 2 * r + 1), np.uint8))
+    m = mask > 0
+    return float((m & (region == 0)).sum() / max(m.sum(), 1))
+
+
 def sam_masks(photo_path):
     """sam_masks.py 產生的遮罩與羅紋寬度（跟照片同資料夾、檔名接在照片名後面）；沒有就回傳 (None, None, 0)。"""
     g = photo_path.with_name(f"{photo_path.stem}_garment.png")
@@ -427,6 +498,8 @@ def main():
     ap.add_argument("--method", choices=["tps", "panel"], default="tps",
                     help="tps＝整件彎曲貼合輪廓（預設）；panel＝每片版片各自對齊、花紋不變形"
                          "（實驗中：網格和照片形狀要很接近才對得上，見 align_panels.py）")
+    ap.add_argument("--out-name", default=None,
+                    help="輸出資料夾名稱（output/texture_bake/ 底下），預設是衣服網格的名稱；同一件網格貼不同照片時用")
     ap.add_argument("--no-neckline", action="store_true",
                     help="不偵測照片的前領線，只用外輪廓對齊（舊做法）")
     ap.add_argument("--keep-collar", action="store_true",
@@ -447,11 +520,22 @@ def main():
 
     # 1. 去背：有 SAM 的遮罩就用 SAM 的（sam_masks.py），沒有就用 GrabCut
     sam_garment, sam_opening, sam_rib = sam_masks(photo_path)
+    mask_p = photo_mask(photo)
     if sam_garment is not None:
-        mask_p = sam_garment.astype(np.uint8) * 255
-        print("去背：用 SAM 的遮罩")
-    else:
-        mask_p = photo_mask(photo)
+        # SAM 和 GrabCut 各有失手的時候（背景跟布同色、衣服下有陰影）：有關鍵點就選輪廓比較貼關鍵點的那個
+        kp_file = photo_path.with_name(f"{photo_path.stem}_keypoints.json")
+        sam_m = sam_garment.astype(np.uint8) * 255
+        if kp_file.exists():
+            import json
+            kp = json.loads(kp_file.read_text(encoding="utf-8"))
+            fs, fg = mask_fit(sam_m, kp), mask_fit(mask_p, kp)
+            use_sam = fs <= fg
+            print(f"去背：漏出關鍵點範圍 SAM {fs * 100:.1f}%／GrabCut {fg * 100:.1f}% → 用 {'SAM' if use_sam else 'GrabCut'}")
+        else:
+            use_sam = True
+            print("去背：用 SAM 的遮罩")
+        if use_sam:
+            mask_p = sam_m
     base = np.median(photo[mask_p > 0], axis=0)
     photo_raw, collar_fix = photo, None
     if not args.keep_collar:
@@ -470,11 +554,17 @@ def main():
         if not args.no_neckline:
             idx = mesh_front_neckline(folder, name)
             manual = photo_path.with_name(f"{photo_path.stem}_neckline.json")
+            kp_file = photo_path.with_name(f"{photo_path.stem}_keypoints.json")
             if manual.exists():
                 # 人工標的前領線（[[x, y], …]，左→右），最準；上架時讓商家確認或修正一次
                 import json
                 found = (np.array(json.loads(manual.read_text(encoding="utf-8")), float), None, None, 0.0)
                 print("前領線：用人工標的線")
+            elif kp_file.exists():
+                import json
+                curve, rib = neckline_from_keypoints(json.loads(kp_file.read_text(encoding="utf-8")), photo_raw)
+                found = None if curve is None else (curve, None, None, rib)
+                print("前領線：用 DeepFashion2 關鍵點（第 2～6 點）")
             else:
                 # SAM 的領口開口實測不可靠（羅紋和開口內側同色，tiny、base 都分不開），所以不用；
                 # 改用放射掃描找明暗交界（photo_front_neckline）
@@ -496,15 +586,16 @@ def main():
     band = cv2.dilate(covered.astype(np.uint8), np.ones((7, 7), np.uint8)) & (~covered).astype(np.uint8)
     tex = cv2.inpaint(tex, band * 255, 3, cv2.INPAINT_TELEA)
 
-    dst_dir = OUT / name if args.method == "tps" else OUT / f"{name}_{args.method}"
+    out_name = args.out_name or (name if args.method == "tps" else f"{name}_{args.method}")
+    dst_dir = OUT / out_name
     dst_dir.mkdir(parents=True, exist_ok=True)
     Image.fromarray(tex).save(dst_dir / "texture.png")
     obj_text = (folder / f"{name}_sewn.obj").read_text().splitlines()
-    obj_text[0] = f"mtllib {name}.mtl"
-    (dst_dir / f"{name}.obj").write_text("\n".join(obj_text) + "\n")
-    shutil.copy(folder / f"{name}_material.mtl", dst_dir / f"{name}.mtl")
-    mtl = (dst_dir / f"{name}.mtl").read_text().splitlines()
-    (dst_dir / f"{name}.mtl").write_text("\n".join(
+    obj_text[0] = f"mtllib {out_name}.mtl"
+    (dst_dir / f"{out_name}.obj").write_text("\n".join(obj_text) + "\n")
+    shutil.copy(folder / f"{name}_material.mtl", dst_dir / f"{out_name}.mtl")
+    mtl = (dst_dir / f"{out_name}.mtl").read_text().splitlines()
+    (dst_dir / f"{out_name}.mtl").write_text("\n".join(
         "map_Kd texture.png" if line.startswith("map_Kd") else line for line in mtl) + "\n")
 
     # 對齊檢查圖
