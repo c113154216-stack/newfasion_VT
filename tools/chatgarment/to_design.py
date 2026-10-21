@@ -6,7 +6,10 @@
 文字部分決定「是哪一種」（上衣類型、領型、有沒有袖子…），
 數值部分決定「多少」（衣長、寬鬆度、袖長…，0～1 正規化後還原到各參數的範圍）。
 轉換邏輯直接用 ChatGarment 的 recursive_change_params_1float，和作者的流程一致；
-之後再用第一步的文字描述修正領子配件（fix_collar：描述寫圓領，版型卻多了翻領／高領）。
+之後再用第一步的文字描述修正「描述對、版型錯」的地方：
+  fix_collar      領子配件（描述寫圓領，版型卻多了翻領／高領）
+  fix_neck_shape  領口形狀（描述寫圓領，版型卻是方領；描述寫 V 領，版型卻是圓領）
+  fix_sleeveless  有沒有袖子（描述寫短袖，版型卻是無袖）
 
 要用 GarmentCode 的 .venv（不是 .venv-chatgarment）：
     .venv\\Scripts\\python tools\\chatgarment\\to_design.py <infer.py 的輸出資料夾> [--no-mesh]
@@ -78,6 +81,50 @@ def fix_collar(design, styles):
     return have, want
 
 
+ROUND_SHAPES = ("CircleNeckHalf", "CurvyNeckHalf", "CircleArcNeckHalf", "Bezier2NeckHalf")  # 都算圓弧形
+
+
+def neck_shape_from_description(styles):
+    """依文字描述決定領口形狀；看不出來（襯衫領、Polo 領、帽子…）回傳 None，不改。"""
+    collar = " ".join(styles.get("collar") or []).lower()
+    if "v-neck" in collar or "v neck" in collar:
+        return "VNeckHalf"
+    if "square" in collar:
+        return "SquareNeckHalf"
+    if any(k in collar for k in ("crew", "round", "scoop")):
+        return "CircleNeckHalf"
+    return None
+
+
+def fix_neck_shape(design, styles):
+    """領口形狀也有「描述對、版型錯」：描述寫圓領，版型卻是方領；描述寫 V 領，版型卻是圓領。
+    以描述為準修正前領；後領 V 領、方領都改回圓領（一般後領是淺圓弧）。回傳 (舊, 新) 或 None。"""
+    want = neck_shape_from_description(styles)
+    have = design["collar"]["f_collar"]["v"]
+    if want is None or have == want or (want == "CircleNeckHalf" and have in ROUND_SHAPES):
+        return None
+    design["collar"]["f_collar"]["v"] = want
+    if design["collar"]["b_collar"]["v"] not in ROUND_SHAPES:
+        design["collar"]["b_collar"]["v"] = "CircleNeckHalf"
+    return have, want
+
+
+def fix_sleeveless(design, styles):
+    """描述寫短袖／長袖，版型卻是無袖（或反過來）。以描述為準，回傳 (舊, 新) 或 None。"""
+    sleeves = " ".join(styles.get("sleeves") or []).lower()
+    if "sleeveless" in sleeves:
+        want = True
+    elif any(k in sleeves for k in ("short sleeve", "long sleeve", "3/4 sleeve", "elbow")):
+        want = False
+    else:
+        return None
+    have = bool(design["sleeve"]["sleeveless"]["v"])
+    if have == want:
+        return None
+    design["sleeve"]["sleeveless"]["v"] = want
+    return have, want
+
+
 def to_designs(gu, result_dir):
     """回傳 {'upper': design, ...}。上下身分開的輸出，76 個數值前後各 38 個；連身的整組 76 個。"""
     pred = json.loads((result_dir / "output.json").read_text(encoding="utf-8"))
@@ -100,11 +147,13 @@ def to_designs(gu, result_dir):
             desc = read_description(result_dir)
             key = "upperbody_garment" if name == "upper" else "wholebody_garment"
             styles = (desc.get(key) or {}).get("geometry_styles", {})
-            changed = fix_collar(design, styles)
-            if changed:
-                FIXED.add(result_dir.name)
-                print(f"[{result_dir.name}] 領子配件 {changed[0]} → {changed[1]}"
-                      f"（描述：collar={styles.get('collar')}、hood={styles.get('hood')}）")
+            for label, fix in (("領子配件", fix_collar), ("領口形狀", fix_neck_shape), ("無袖", fix_sleeveless)):
+                changed = fix(design, styles)
+                if changed:
+                    FIXED.add(result_dir.name)
+                    print(f"[{result_dir.name}] {label} {changed[0]} → {changed[1]}"
+                          f"（描述：collar={styles.get('collar')}、sleeves={styles.get('sleeves')}、"
+                          f"hood={styles.get('hood')}）")
         designs[name] = design
     return designs
 

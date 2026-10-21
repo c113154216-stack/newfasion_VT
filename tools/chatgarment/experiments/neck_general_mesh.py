@@ -32,8 +32,12 @@ def main(results, tag, body_name="mean_male"):
     body_yaml = dm.GC_ROOT / "assets" / "bodies" / f"{body_name}.yaml"
     body = BodyParameters(str(body_yaml))
     bv, bf = igl.read_triangle_mesh(str(body_yaml.with_suffix(".obj")))
-    for src in sorted(Path(results).glob("*/design_upper.yaml")):
-        g = src.parent.name
+    # 上衣存在 design_upper.yaml；連身款（例如背心被判成 wholebody）存在 design_wholebody.yaml
+    sources = {}
+    for part in ("wholebody", "upper"):
+        for src in Path(results).glob(f"*/design_{part}.yaml"):
+            sources[src.parent.name] = src
+    for g, src in sorted(sources.items()):
         design = yaml.safe_load(src.read_text(encoding="utf-8"))["design"]
         design["meta"]["bottom"]["v"] = None
         design["meta"]["wb"]["v"] = None

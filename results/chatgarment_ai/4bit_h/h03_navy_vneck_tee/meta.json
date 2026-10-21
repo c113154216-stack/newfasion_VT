@@ -1,0 +1,7 @@
+{
+  "image": "output\\chatgarment_ai\\inputs_h\\h03_navy_vneck_tee.png",
+  "mode": "4bit",
+  "seconds": 30.2,
+  "peak_gpu_gib": 5.91,
+  "n_floats": 152
+}

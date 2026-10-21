@@ -1,0 +1,7 @@
+{
+  "image": "output\\chatgarment_ai\\inputs_h\\h04_navy_polo.png",
+  "mode": "4bit",
+  "seconds": 29.8,
+  "peak_gpu_gib": 5.91,
+  "n_floats": 152
+}

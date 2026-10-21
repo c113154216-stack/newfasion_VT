@@ -59,15 +59,21 @@ def build(design, name, body_yaml, body_mesh):
     return out.parent, float(x[:, 1].min())
 
 
-def main(results, base_tag, tag, body_name="mean_male"):
+def main(results, base_tag, tag, body_name="mean_male", *only):
+    """only：只做這幾件（資料夾名稱），例如補跑；不給就全部。"""
     dm.ensure_system_json()
     body_yaml = dm.GC_ROOT / "assets" / "bodies" / f"{body_name}.yaml"
     body = BodyParameters(str(body_yaml))
     bv, bf = igl.read_triangle_mesh(str(body_yaml.with_suffix(".obj")))
     body_mesh = (bv * 100, bf)
 
+    # 上衣存在 design_upper.yaml；連身款（例如背心被判成 wholebody）存在 design_wholebody.yaml
+    sources = {}
+    for part in ("wholebody", "upper"):
+        for src in (CWD / results).glob(f"*/design_{part}.yaml"):
+            sources[src.parent.name] = src
     items = []
-    for src in sorted((CWD / results).glob("*/design_upper.yaml")):
+    for _, src in sorted(sources.items()):
         design = yaml.safe_load(src.read_text(encoding="utf-8"))["design"]
         design["meta"]["bottom"]["v"] = None
         design["meta"]["wb"]["v"] = None
@@ -82,15 +88,23 @@ def main(results, base_tag, tag, body_name="mean_male"):
         fitted = design["meta"]["upper"]["v"] == "FittedShirt"
         ai_hem = None if fitted else sewn_hem(base_tag, g)
         lift = float(np.median(lifts)) if fitted else None
+        if only and g not in only:
+            continue
         info = plan(design, body, MetaGarment, styles, garment_name, ai_sewn_hem=ai_hem, lift=lift)
-        if info is None:
-            print(f"[{g}] 沒有對應的規則，衣長不改", flush=True)
+        neck = fix_neck_depth(design, body, MetaGarment)
+        name = f"{tag}_{g}"
+        if info is None:  # 沒有衣長規則：衣長維持 AI 的，領口校正、新縫合照做
+            folder, hem = build(design, name, body_yaml, body_mesh)
+            (folder / "hem_fix.json").write_text(json.dumps(
+                {"衣長校正": "沒有對應的規則，衣長不改", "縫好的下襬 cm": round(hem, 1), "領口校正": neck, "縫合": SEW},
+                ensure_ascii=False, indent=2), encoding="utf-8")
+            (folder / "design_used.yaml").write_text(yaml.safe_dump({"design": design}, allow_unicode=True),
+                                                     encoding="utf-8")
+            print(f"[{g}] 沒有對應的規則，衣長不改（下襬 {hem:.1f} cm）", flush=True)
             continue
         if not fitted:
             lifts.append(info["縫合往上提 cm"])
-        neck = fix_neck_depth(design, body, MetaGarment)
 
-        name = f"{tag}_{g}"
         folder, hem = build(design, name, body_yaml, body_mesh)
         passes = [round(hem, 1)]
         if abs(hem - info["_target"]) > TOLERANCE_CM:  # 縫合往上提的量會隨衣長稍微改變，修正一次

@@ -1,0 +1,7 @@
+{
+  "image": "output\\chatgarment_ai\\inputs_h\\h05_frenchblue_button_down_shirt.png",
+  "mode": "4bit",
+  "seconds": 29.2,
+  "peak_gpu_gib": 5.91,
+  "n_floats": 152
+}
