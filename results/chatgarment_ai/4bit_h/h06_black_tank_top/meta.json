@@ -1,0 +1,7 @@
+{
+  "image": "output\\chatgarment_ai\\inputs_h\\h06_black_tank_top.png",
+  "mode": "4bit",
+  "seconds": 25.2,
+  "peak_gpu_gib": 5.8,
+  "n_floats": 76
+}

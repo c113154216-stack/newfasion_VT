@@ -146,7 +146,21 @@
         .filter((h) => h.endsWith("/") && !h.startsWith("_") && !h.startsWith(".")).map((h) => h.slice(0, -1));
     }
 
+    // 預設只列 3090（bf16）推論的幾批和 4-bit 那批；網址加 ?all=1 列出全部
+    const SHOW_ALL = new URLSearchParams(location.search).has("all");
+    const FOCUS = [  // [名稱開頭, 分組名稱]，依序比對（先比較長的開頭）
+      ["aibf16_3090_v2_", "3090 bf16 第一批：最新（領口＋衣長修正）"],
+      ["aibf16_3090_g", "3090 bf16 第一批：原本流程"],
+      ["aibf16_h_v2_", "3090 bf16 第二批：最新（領口＋衣長修正）"],
+      ["aibf16_h_neck_", "3090 bf16 第二批：領口修正、衣長用 AI 的"],
+      ["ai4bit_v2_", "4-bit 第一批：原本流程"],
+    ];
+
     function groupOf(name, source) {
+      if (!SHOW_ALL) {
+        const hit = FOCUS.find(([prefix]) => source === "chatgarment" && name.startsWith(prefix));
+        return hit ? hit[1] : null;
+      }
       if (source === "physics") return "給物理模擬（T-pose、公尺）";
       if (/^ai4bit_/.test(name)) return "AI 判斷（4-bit）";
       if (/^aibf16_/.test(name)) return "AI 判斷（原版 bf16）";
@@ -160,8 +174,9 @@
       const items = [
         ...(await listDir("output/chatgarment/")).map((n) => ({ name: n, source: "chatgarment" })),
         ...(await listDir("output/physics_export/")).map((n) => ({ name: n, source: "physics" })),
-      ].filter((it) => it.name !== "bodies");
+      ].filter((it) => it.name !== "bodies" && groupOf(it.name, it.source) !== null);
       const groups = new Map();
+      if (!SHOW_ALL) for (const [, g] of FOCUS) groups.set(g, []);  // 照 FOCUS 的順序排
       for (const it of items) {
         const g = groupOf(it.name, it.source);
         if (!groups.has(g)) groups.set(g, []);
@@ -170,6 +185,7 @@
       const list = $("list");
       list.innerHTML = items.length ? "" : '<div class="group">找不到衣服：要先跑 ① ② 或 ③</div>';
       for (const [g, its] of groups) {
+        if (!its.length) continue;
         const head = document.createElement("div");
         head.className = "group"; head.textContent = `${g}（${its.length}）`;
         list.appendChild(head);

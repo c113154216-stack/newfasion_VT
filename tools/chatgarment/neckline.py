@@ -26,32 +26,12 @@ import numpy as np
 # 最淺的領深 ＝ 比例 × 身體頸寬（neck_w）。8 cm／2 cm 是一般男 T 的打版尺寸，用平均男性的頸寬 20.3 cm 換算
 FRONT_MIN_RATIO = 0.39
 BACK_MIN_RATIO = 0.10
+# 依前領形狀調整最淺的前領深：AI 對圓領、V 領給的深度數值幾乎一樣（都接近 0），
+# 共用 0.39 會把普通 V 領改成 8 cm 的淺 V；一般 V 領 T 前深約 13 cm（0.65 × 頸寬）
+FRONT_MIN_RATIO_BY_SHAPE = {"VNeckHalf": 0.65}
 # GarmentCode 設計範圍（assets/design_params/default.yaml）
 FC_RANGE = (0.3, 2.0)
 BC_RANGE = (0.0, 2.0)
-
-
-# 第一問描述裡的領型字眼 → GarmentCode 的領口形狀（前後同一種）
-NECK_SHAPES = [
-    (("v-neck", "v neck", "vneck"), "VNeckHalf"),
-    (("square",), "SquareNeckHalf"),
-    (("crew", "round", "scoop"), "CircleNeckHalf"),
-]
-
-
-def fix_neck_shape(design, styles):
-    """ChatGarment 先寫文字描述、再產生版型參數，兩步沒有強制一致：
-    常見的錯是描述寫 crew neck（圓領），版型卻是方領、弧形領或 V 領。以描述為準修正領口形狀。
-    styles：第一問描述的 geometry_styles。描述沒提到領型（例如帽 T 只寫 collarless）就不改。
-    回傳 (舊, 新) 或 None。"""
-    text = " ".join(styles.get("collar") or []).lower()
-    want = next((shape for keys, shape in NECK_SHAPES if any(k in text for k in keys)), None)
-    collar = design["collar"]
-    have = collar["f_collar"]["v"]
-    if want is None or (have == want and collar["b_collar"]["v"] == want):
-        return None
-    collar["f_collar"]["v"] = collar["b_collar"]["v"] = want
-    return have, want
 
 
 def _depths(design, body, MetaGarment):
@@ -94,12 +74,15 @@ def fix_neck_depth(design, body, MetaGarment):
     if not (at0 and at1 and at_max):
         return None
     neck_w = float(body["neck_w"])
+    front_ratio = FRONT_MIN_RATIO_BY_SHAPE.get(collar["f_collar"]["v"], FRONT_MIN_RATIO)
     targets, params = [], []
-    for k, (u, lo_ratio) in enumerate([(u_f, FRONT_MIN_RATIO), (u_b, BACK_MIN_RATIO)]):
+    for k, (u, lo_ratio) in enumerate([(u_f, front_ratio), (u_b, BACK_MIN_RATIO)]):
         d_min = lo_ratio * neck_w
         d_max = max(at_max[k], d_min)
         target = d_min + u * (d_max - d_min)
         slope = (at1[k] - at0[k]) / 0.5  # 深度 ＝ 參數 × 胸線高 ＋ 肩斜補正，在不碰上限時是線性的
+        if abs(slope) < 1e-6:  # 兩次都碰到 GarmentCode 的深度上限，量不出關係 → 不校正
+            return None
         targets.append(target)
         params.append((target - at0[k]) / slope)
 

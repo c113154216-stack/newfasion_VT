@@ -1,0 +1,7 @@
+{
+  "image": "/home/c113154216/3090/newfashion_VT/output/chatgarment_ai/inputs/h05_frenchblue_button_down_shirt.png",
+  "mode": "bf16",
+  "seconds": 14.5,
+  "peak_gpu_gib": 15.46,
+  "n_floats": 152
+}

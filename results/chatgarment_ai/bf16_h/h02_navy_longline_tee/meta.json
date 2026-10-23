@@ -1,0 +1,7 @@
+{
+  "image": "/home/c113154216/3090/newfashion_VT/output/chatgarment_ai/inputs/h02_navy_longline_tee.png",
+  "mode": "bf16",
+  "seconds": 13.9,
+  "peak_gpu_gib": 15.44,
+  "n_floats": 152
+}

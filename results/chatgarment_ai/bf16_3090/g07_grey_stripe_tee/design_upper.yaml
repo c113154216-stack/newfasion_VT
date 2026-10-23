@@ -107,7 +107,7 @@ design:
       - CircleArcNeckHalf
       - Bezier2NeckHalf
       type: select
-      v: SquareNeckHalf
+      v: CircleNeckHalf
     f_flip_curve:
       default_prob: 0.8
       range:
