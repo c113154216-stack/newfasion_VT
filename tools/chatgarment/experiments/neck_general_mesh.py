@@ -22,7 +22,7 @@ import design_to_mesh as dm  # noqa: E402  匯入時切到 GarmentCodeRC 根目�
 from assets.bodies.body_params import BodyParameters  # noqa: E402
 from assets.garment_programs.meta_garment import MetaGarment  # noqa: E402
 from neckline import fix_neck_depth  # noqa: E402
-from to_design import fix_neck_shape, read_description  # noqa: E402
+from to_design import fix_cuff, fix_neck_shape, read_description  # noqa: E402
 from sew import mesh_edges, rest_lengths, sew, write_obj_with_new_positions  # noqa: E402
 
 SEW = {"stretch_limit": 0.02, "stretch_weight": 100.0, "bend": 1.0}
@@ -47,9 +47,12 @@ def main(results, tag, body_name="mean_male", *only):
         desc = read_description(src.parent)
         styles = (desc.get("upperbody_garment") or desc.get("wholebody_garment") or {}).get("geometry_styles", {})
         shape = fix_neck_shape(design, styles)   # 先修形狀，再依形狀量深度
+        cuff = fix_cuff(design, styles)
         info = fix_neck_depth(design, body, MetaGarment)
         if shape:
             info = {"領口形狀": f"{shape[0]} → {shape[1]}", **(info or {})}
+        if cuff:
+            info = {"袖口": f"{cuff[0]} → {cuff[1]}", **(info or {})}
         name = f"{tag}_{g}"
         _, _, paths = dm.generate(design, body_yaml, name)
         v, f = igl.read_triangle_mesh(str(paths.g_box_mesh))
