@@ -1,0 +1,7 @@
+{
+  "image": "/home/c113154216/3090/newfashion_VT/output/chatgarment_ai/inputs/A_maroon_rib_baby_tee_front.jpg",
+  "mode": "bf16",
+  "seconds": 13.4,
+  "peak_gpu_gib": 15.43,
+  "n_floats": 152
+}

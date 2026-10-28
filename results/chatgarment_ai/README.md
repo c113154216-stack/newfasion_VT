@@ -9,10 +9,13 @@ AI 判斷款式的原始輸出。重新產生要用顯示卡（bf16 要 24 GB �
 | `bf16_3090/` | bf16 原版 | RTX 3090，Linux | 6（黑 T、魚印花 T 是 webp，沒跑到） |
 | `bf16_h/` | bf16 原版 | RTX 3090，Linux | 12（第二批：短版、長版、V 領、Polo、襯衫、背心、拉鍊帽 T、開襟毛衣、高領、落肩、條紋、背面印花） |
 | `4bit_h/` | 4-bit（NF4） | RTX 5050，Windows | 12（同上） |
+| `bf16_i/` | bf16 原版 | RTX 3090，Linux | 50（第三批：領口比對，11 種領型；`labels.json` 是每件的領型組別和商品頁寫的領型＝正確答案） |
 
 照片在 `output/chatgarment_ai/inputs_v2/`（第一批）、`inputs_h/`＋`inputs_h_back/`（第二批，正面＋背面），由 `tools/chatgarment/import_photos.py` 改名而來。
-第二批是品牌商品頁的官方照，**只供內部測試，不上傳、不公開**（來源見 `inputs_h/sources.md`）。
+第三批在 `inputs_i/`（只有正面）。
+第二、三批是品牌商品頁的官方照，**只供內部測試，不上傳、不公開**（來源見 `inputs_h/sources.md`、`inputs_i/sources.md`）。
 `bf16_3090/` 在 3090 上是用原始檔名跑的（`Hoodie_1`、`RedT`…），帶回後改成相同的 g 開頭名稱。
+`bf16_i/` 也是用原始檔名跑的（`A_blue_crew_tee_front`…），帶回後改成 `i01`～`i50`，對照見 `labels.json` 的「原檔名」。
 
 每張照片一個資料夾：
 

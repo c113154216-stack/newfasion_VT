@@ -1,0 +1,302 @@
+{
+  "i01_blue_crew_tee": {
+    "組別": "A",
+    "組別領型": "圓領",
+    "商品頁寫的領型": "Crew Neck（頁面：crew neck）",
+    "原檔名": "A_blue_crew_tee_front"
+  },
+  "i02_brown_crew_sweatshirt": {
+    "組別": "A",
+    "組別領型": "圓領",
+    "商品頁寫的領型": "Crewneck（商品名：Crewneck Sweatshirt）",
+    "原檔名": "A_brown_crew_sweatshirt_front"
+  },
+  "i03_green_crew_tee": {
+    "組別": "A",
+    "組別領型": "圓領",
+    "商品頁寫的領型": "Crew Neck（商品名：Crew Neck T-Shirt）",
+    "原檔名": "A_green_crew_tee_front"
+  },
+  "i04_green_ribbed_long_sleeve_tee": {
+    "組別": "A",
+    "組別領型": "圓領",
+    "商品頁寫的領型": "Crew Neck（頁面：classic crew neckline）",
+    "原檔名": "A_green_ribbed_long_sleeve_tee_front"
+  },
+  "i05_maroon_rib_baby_tee": {
+    "組別": "A",
+    "組別領型": "圓領",
+    "商品頁寫的領型": "頁面未寫領型（商品名：Micro Rib Baby Tee；目視為圓領）",
+    "原檔名": "A_maroon_rib_baby_tee_front"
+  },
+  "i06_navy_crew_sweatshirt": {
+    "組別": "A",
+    "組別領型": "圓領",
+    "商品頁寫的領型": "Crewneck（商品名：Crewneck Sweatshirt）",
+    "原檔名": "A_navy_crew_sweatshirt_front"
+  },
+  "i07_navy_crew_tee": {
+    "組別": "A",
+    "組別領型": "圓領",
+    "商品頁寫的領型": "Crewneck collar（頁面描述）",
+    "原檔名": "A_navy_crew_tee_front"
+  },
+  "i08_olive_crew_long_sleeve_tee": {
+    "組別": "A",
+    "組別領型": "圓領",
+    "商品頁寫的領型": "Crew Neck（頁面：slightly narrow crew neck）",
+    "原檔名": "A_olive_crew_long_sleeve_tee_front"
+  },
+  "i09_pink_crew_tee": {
+    "組別": "A",
+    "組別領型": "圓領",
+    "商品頁寫的領型": "Crew Neck（商品名：Crew Neck T-Shirt）",
+    "原檔名": "A_pink_crew_tee_front"
+  },
+  "i10_red_crew_long_sleeve_tee": {
+    "組別": "A",
+    "組別領型": "圓領",
+    "商品頁寫的領型": "Crew Neck（頁面：basic crew neck design）",
+    "原檔名": "A_red_crew_long_sleeve_tee_front"
+  },
+  "i11_green_scoop_tee": {
+    "組別": "B",
+    "組別領型": "大圓領",
+    "商品頁寫的領型": "Scoop neck（商品名＋描述）",
+    "原檔名": "B_green_scoop_tee_front"
+  },
+  "i12_navy_scoop_long_sleeve_tee": {
+    "組別": "B",
+    "組別領型": "大圓領",
+    "商品頁寫的領型": "Scoop Neck（商品名）",
+    "原檔名": "B_navy_scoop_long_sleeve_tee_front"
+  },
+  "i13_purple_scoop_tee": {
+    "組別": "B",
+    "組別領型": "大圓領",
+    "商品頁寫的領型": "Scoop neckline（描述：scoop feminine neckline）",
+    "原檔名": "B_purple_scoop_tee_front"
+  },
+  "i14_red_scoop_tee": {
+    "組別": "B",
+    "組別領型": "大圓領",
+    "商品頁寫的領型": "Scoop neckline（商品名＋描述）",
+    "原檔名": "B_red_scoop_tee_front"
+  },
+  "i15_royal_scoop_dolman_tee": {
+    "組別": "B",
+    "組別領型": "大圓領",
+    "商品頁寫的領型": "Scoop neckband（描述：5/8\" scoop neckband）",
+    "原檔名": "B_royal_scoop_dolman_tee_front"
+  },
+  "i16_blue_deep_vneck_tee": {
+    "組別": "C",
+    "組別領型": "V 領",
+    "商品頁寫的領型": "Deep V-Neck（商品名）",
+    "原檔名": "C_blue_deep_vneck_tee_front"
+  },
+  "i17_charcoal_vneck_tee": {
+    "組別": "C",
+    "組別領型": "V 領",
+    "商品頁寫的領型": "V-Neck（商品名）※替代第 3 件深 V",
+    "原檔名": "C_charcoal_vneck_tee_front"
+  },
+  "i18_green_vneck_tee": {
+    "組別": "C",
+    "組別領型": "V 領",
+    "商品頁寫的領型": "V-Neck（商品名）",
+    "原檔名": "C_green_vneck_tee_front"
+  },
+  "i19_grey_vneck_sweater": {
+    "組別": "C",
+    "組別領型": "V 領",
+    "商品頁寫的領型": "V-Neck（商品名）",
+    "原檔名": "C_grey_vneck_sweater_front"
+  },
+  "i20_navy_vneck_tee": {
+    "組別": "C",
+    "組別領型": "V 領",
+    "商品頁寫的領型": "V-Neck（商品名）",
+    "原檔名": "C_navy_vneck_tee_front"
+  },
+  "i21_red_deep_vneck_tee": {
+    "組別": "C",
+    "組別領型": "V 領",
+    "商品頁寫的領型": "Deep V-Neck（商品名）",
+    "原檔名": "C_red_deep_vneck_tee_front"
+  },
+  "i22_red_vneck_tee": {
+    "組別": "C",
+    "組別領型": "V 領",
+    "商品頁寫的領型": "V-Neck（商品名）",
+    "原檔名": "C_red_vneck_tee_front"
+  },
+  "i23_wine_vneck_sweater": {
+    "組別": "C",
+    "組別領型": "V 領",
+    "商品頁寫的領型": "V-Neck（商品名：Merino Sweater",
+    "原檔名": "C_wine_vneck_sweater_front"
+  },
+  "i24_black_square_neck_long_sleeve_top": {
+    "組別": "D",
+    "組別領型": "方領",
+    "商品頁寫的領型": "Square-Neck（商品名；描述：low-cut square neckline）",
+    "原檔名": "D_black_square_neck_long_sleeve_top_front"
+  },
+  "i25_burgundy_square_neck_tank": {
+    "組別": "D",
+    "組別領型": "方領",
+    "商品頁寫的領型": "Square-Neck（商品名；描述：square neckline）",
+    "原檔名": "D_burgundy_square_neck_tank_front"
+  },
+  "i26_grey_square_neck_tank": {
+    "組別": "D",
+    "組別領型": "方領",
+    "商品頁寫的領型": "Square neckline（描述）",
+    "原檔名": "D_grey_square_neck_tank_front"
+  },
+  "i27_navy_square_neck_rib_tee": {
+    "組別": "D",
+    "組別領型": "方領",
+    "商品頁寫的領型": "Square neck（描述：square neck shaping）",
+    "原檔名": "D_navy_square_neck_rib_tee_front"
+  },
+  "i28_blue_boat_neck_top": {
+    "組別": "E",
+    "組別領型": "船領",
+    "商品頁寫的領型": "Boat-Neck（商品名；描述：boat neck）",
+    "原檔名": "E_blue_boat_neck_top_front"
+  },
+  "i29_green_boat_neck_sweater": {
+    "組別": "E",
+    "組別領型": "船領",
+    "商品頁寫的領型": "Boat-Neck（商品名；描述：boat neckline）",
+    "原檔名": "E_green_boat_neck_sweater_front"
+  },
+  "i30_red_boat_neck_top": {
+    "組別": "E",
+    "組別領型": "船領",
+    "商品頁寫的領型": "Boat-Neck（商品名；描述：boat neck）",
+    "原檔名": "E_red_boat_neck_top_front"
+  },
+  "i31_teal_boat_neck_blouse": {
+    "組別": "E",
+    "組別領型": "船領",
+    "商品頁寫的領型": "Boat Neck（商品名）",
+    "原檔名": "E_teal_boat_neck_blouse_front"
+  },
+  "i32_green_turtleneck_sweater": {
+    "組別": "F",
+    "組別領型": "高領／半高領",
+    "商品頁寫的領型": "Turtleneck（商品名：Cashmere Sweater",
+    "原檔名": "F_green_turtleneck_sweater_front"
+  },
+  "i33_navy_mock_neck_tee": {
+    "組別": "F",
+    "組別領型": "高領／半高領",
+    "商品頁寫的領型": "Mock Neck（商品名）",
+    "原檔名": "F_navy_mock_neck_tee_front"
+  },
+  "i34_navy_turtleneck_sweater": {
+    "組別": "F",
+    "組別領型": "高領／半高領",
+    "商品頁寫的領型": "Turtleneck（商品名：The Boxy Turtleneck in Cashmere）",
+    "原檔名": "F_navy_turtleneck_sweater_front"
+  },
+  "i35_olive_mock_neck_tee": {
+    "組別": "F",
+    "組別領型": "高領／半高領",
+    "商品頁寫的領型": "Mock Neck（商品名；描述：rib mock neck collar）",
+    "原檔名": "F_olive_mock_neck_tee_front"
+  },
+  "i36_red_turtleneck_sweater": {
+    "組別": "F",
+    "組別領型": "高領／半高領",
+    "商品頁寫的領型": "Turtleneck（商品名）",
+    "原檔名": "F_red_turtleneck_sweater_front"
+  },
+  "i37_grey_henley_tee": {
+    "組別": "G",
+    "組別領型": "亨利領",
+    "商品頁寫的領型": "Henley（商品名；three-button placket）",
+    "原檔名": "G_grey_henley_tee_front"
+  },
+  "i38_indigo_henley_tee": {
+    "組別": "G",
+    "組別領型": "亨利領",
+    "商品頁寫的領型": "Henley（商品名；slim placket）",
+    "原檔名": "G_indigo_henley_tee_front"
+  },
+  "i39_red_henley_tee": {
+    "組別": "G",
+    "組別領型": "亨利領",
+    "商品頁寫的領型": "Henley（商品名；four-button placket）",
+    "原檔名": "G_red_henley_tee_front"
+  },
+  "i40_charcoal_polo": {
+    "組別": "H",
+    "組別領型": "Polo 翻領",
+    "商品頁寫的領型": "Polo（商品名；three-button placket）",
+    "原檔名": "H_charcoal_polo_front"
+  },
+  "i41_green_polo": {
+    "組別": "H",
+    "組別領型": "Polo 翻領",
+    "商品頁寫的領型": "Polo（商品名；welt collar）",
+    "原檔名": "H_green_polo_front"
+  },
+  "i42_red_polo": {
+    "組別": "H",
+    "組別領型": "Polo 翻領",
+    "商品頁寫的領型": "Polo（商品名；flat-knit collar）",
+    "原檔名": "H_red_polo_front"
+  },
+  "i43_burgundy_dress_shirt": {
+    "組別": "I",
+    "組別領型": "襯衫領",
+    "商品頁寫的領型": "Rolled button-down collar（描述）",
+    "原檔名": "I_burgundy_dress_shirt_front"
+  },
+  "i44_green_button_down_shirt": {
+    "組別": "I",
+    "組別領型": "襯衫領",
+    "商品頁寫的領型": "Button-down collar（描述）",
+    "原檔名": "I_green_button_down_shirt_front"
+  },
+  "i45_grey_oxford_shirt": {
+    "組別": "I",
+    "組別領型": "襯衫領",
+    "商品頁寫的領型": "Button-down collar（描述）",
+    "原檔名": "I_grey_oxford_shirt_front"
+  },
+  "i46_blue_hoodie": {
+    "組別": "J",
+    "組別領型": "帽 T",
+    "商品頁寫的領型": "Hoodie（商品名）",
+    "原檔名": "J_blue_hoodie_front"
+  },
+  "i47_green_hoodie": {
+    "組別": "J",
+    "組別領型": "帽 T",
+    "商品頁寫的領型": "Hooded（商品名：Hooded Sweatshirt）",
+    "原檔名": "J_green_hoodie_front"
+  },
+  "i48_red_hoodie": {
+    "組別": "J",
+    "組別領型": "帽 T",
+    "商品頁寫的領型": "Hooded（商品名：Hooded Sweatshirt）",
+    "原檔名": "J_red_hoodie_front"
+  },
+  "i49_gray_off_shoulder_top": {
+    "組別": "K",
+    "組別領型": "其他",
+    "商品頁寫的領型": "Off-the-Shoulder（商品名）",
+    "原檔名": "K_gray_off_shoulder_top_front"
+  },
+  "i50_red_sweetheart_neck_top": {
+    "組別": "K",
+    "組別領型": "其他",
+    "商品頁寫的領型": "Sweetheart Neckline（商品名＋領型欄位）",
+    "原檔名": "K_red_sweetheart_neck_top_front"
+  }
+}

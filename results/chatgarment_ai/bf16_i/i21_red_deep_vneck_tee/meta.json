@@ -1,0 +1,7 @@
+{
+  "image": "/home/c113154216/3090/newfashion_VT/output/chatgarment_ai/inputs/C_red_deep_vneck_tee_front.jpg",
+  "mode": "bf16",
+  "seconds": 11.2,
+  "peak_gpu_gib": 15.2,
+  "n_floats": 76
+}

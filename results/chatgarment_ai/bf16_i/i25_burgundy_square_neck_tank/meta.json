@@ -1,0 +1,7 @@
+{
+  "image": "/home/c113154216/3090/newfashion_VT/output/chatgarment_ai/inputs/D_burgundy_square_neck_tank_front.jpg",
+  "mode": "bf16",
+  "seconds": 12.0,
+  "peak_gpu_gib": 15.27,
+  "n_floats": 76
+}

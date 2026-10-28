@@ -1,0 +1,7 @@
+{
+  "image": "/home/c113154216/3090/newfashion_VT/output/chatgarment_ai/inputs/A_green_crew_tee_front.jpg",
+  "mode": "bf16",
+  "seconds": 13.8,
+  "peak_gpu_gib": 15.44,
+  "n_floats": 152
+}

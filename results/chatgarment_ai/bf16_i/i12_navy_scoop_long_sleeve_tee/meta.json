@@ -1,0 +1,7 @@
+{
+  "image": "/home/c113154216/3090/newfashion_VT/output/chatgarment_ai/inputs/B_navy_scoop_long_sleeve_tee_front.jpg",
+  "mode": "bf16",
+  "seconds": 14.1,
+  "peak_gpu_gib": 15.45,
+  "n_floats": 152
+}
