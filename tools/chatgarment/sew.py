@@ -48,7 +48,7 @@ def push_out(x, body_v, body_f, body_n, margin):
 
 def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step=1.0,
         iterations=400, anchor=1e-4, stretch_limit=None, stretch_weight=20.0, gravity=0.0,
-        stretch_mask=None, bend=0.0):
+        stretch_mask=None, bend=0.0, compress_limit=None):
     """局部－全域交替求解，最小化
         Σ w_e(|xi − xj| − 原始長度)²  ＋  body_weight · Σ|xi − 推到身體外的位置|²  ＋  gravity · Σ yi
     局部：每條邊依目前方向算出長度剛好等於原始長度的目標向量；每個頂點算出「不在身體裡」的目標位置
@@ -60,6 +60,9 @@ def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step
     stretch_limit：邊被拉長超過這個比例（例如 0.05 ＝ 5%）時，該邊的權重 w_e 改成 stretch_weight。
         推身體的權重（10）比一般邊（1）大，布料卡在肩膀、脖子這類斜面時會選擇被拉長；
         把拉太長的邊變硬，布料就改成滑開。None 表示不限制（所有邊權重 1）。
+    compress_limit：邊被壓短超過這個比例（例如 0.05 ＝ 短 5%）時，權重也改成 stretch_weight。
+        只限制拉長時，領口撐不開，衣服被身體推向脖子，袖子跟著往上滑、被擠皺（短 7～12 cm）；
+        壓短也變硬，袖子不容易被擠短。None 表示不限制。
     stretch_mask：長度 m 的布林陣列，只有 True 的邊受 stretch_limit 限制；None 表示全部的邊。
     bend：彎曲剛度（拉普拉斯平滑），懲罰每個頂點偏離鄰居平均位置的量 bend · Σ|xi − 鄰居平均|²。
         沒有它時，布被壓縮會擠成細碎的小皺（像揉皺的紙）；加上後多出來的布會形成平順的大褶。
@@ -95,8 +98,12 @@ def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step
         d = A @ x
         length = np.maximum(np.linalg.norm(d, axis=1), 1e-9)
         refactor = False
-        if stretch_limit is not None:
-            over = length > rest * (1 + stretch_limit)
+        if stretch_limit is not None or compress_limit is not None:
+            over = np.zeros(m, bool)
+            if stretch_limit is not None:
+                over |= length > rest * (1 + stretch_limit)
+            if compress_limit is not None:
+                over |= length < rest * (1 - compress_limit)
             if stretch_mask is not None:
                 over &= stretch_mask
             w_new = np.where(over, stretch_weight, 1.0)

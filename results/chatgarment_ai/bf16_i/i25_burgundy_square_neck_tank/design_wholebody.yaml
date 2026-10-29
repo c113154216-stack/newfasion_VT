@@ -821,7 +821,7 @@ design:
         - CuffBandSkirt
         - null
         type: select_null
-        v: CuffBand
+        v: null
     end_width:
       default_prob: 0.4
       range:

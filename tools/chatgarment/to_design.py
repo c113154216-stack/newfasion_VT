@@ -10,6 +10,7 @@
   fix_collar      領子配件（描述寫圓領，版型卻多了翻領／高領）
   fix_neck_shape  領口形狀（描述寫圓領，版型卻是方領；描述寫 V 領，版型卻是圓領）
   fix_sleeveless  有沒有袖子（描述寫短袖，版型卻是無袖）
+  fix_cuff        袖口縮口（描述寫 ribbed cuffs，版型卻沒有縮口）
 
 要用 GarmentCode 的 .venv（不是 .venv-chatgarment）：
     .venv\\Scripts\\python tools\\chatgarment\\to_design.py <infer.py 的輸出資料夾> [--no-mesh]
@@ -125,6 +126,25 @@ def fix_sleeveless(design, styles):
     return have, want
 
 
+CUFF_RUFFLE = 1.7  # 袖子末端收皺倍數：縮口一圈＝袖子末端一圈 ÷ 1.7，g03 試過剛好等於手臂粗細（AI 都給 1，等於沒收）
+
+
+def fix_cuff(design, styles):
+    """袖口縮口：描述幾乎都寫 ribbed cuffs，參數卻從來不選；少數選了的又是描述沒寫的短袖、無袖。
+    以描述為準：長袖（sleeve.length ≥ 0.6）且描述有寫 cuff → CuffBand 並收皺 1.7 倍；描述沒寫 → 不要縮口。
+    第三批 50 件照片比對：對 34 → 44（多做 4 件、漏 2 件描述沒寫的）。回傳 (舊, 新) 或 None。"""
+    sl = design["sleeve"]
+    long_sleeve = not sl["sleeveless"]["v"] and sl["length"]["v"] >= 0.6
+    want = "CuffBand" if long_sleeve and "cuff" in " ".join(styles.get("extra") or []).lower() else None
+    have = sl["cuff"]["type"]["v"]
+    if want == "CuffBand":
+        sl["cuff"]["top_ruffle"]["v"] = CUFF_RUFFLE
+    if have == want:
+        return None
+    sl["cuff"]["type"]["v"] = want
+    return have, want
+
+
 def to_designs(gu, result_dir):
     """回傳 {'upper': design, ...}。上下身分開的輸出，76 個數值前後各 38 個；連身的整組 76 個。"""
     pred = json.loads((result_dir / "output.json").read_text(encoding="utf-8"))
@@ -147,13 +167,13 @@ def to_designs(gu, result_dir):
             desc = read_description(result_dir)
             key = "upperbody_garment" if name == "upper" else "wholebody_garment"
             styles = (desc.get(key) or {}).get("geometry_styles", {})
-            for label, fix in (("領子配件", fix_collar), ("領口形狀", fix_neck_shape), ("無袖", fix_sleeveless)):
+            for label, fix in (("領子配件", fix_collar), ("領口形狀", fix_neck_shape), ("無袖", fix_sleeveless), ("袖口縮口", fix_cuff)):
                 changed = fix(design, styles)
                 if changed:
                     FIXED.add(result_dir.name)
                     print(f"[{result_dir.name}] {label} {changed[0]} → {changed[1]}"
                           f"（描述：collar={styles.get('collar')}、sleeves={styles.get('sleeves')}、"
-                          f"hood={styles.get('hood')}）")
+                          f"hood={styles.get('hood')}、extra={styles.get('extra')}）")
         designs[name] = design
     return designs
 
