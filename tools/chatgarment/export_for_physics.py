@@ -58,6 +58,30 @@ def prepare_tpose_body():
     return obj, yml
 
 
+def prepare_smplx_body(gender="neutral"):
+    """團隊約定的身體：SMPL-X 中性、θ=0、β 全 0（手臂水平，身高 1.721 m）。
+    寫兩份：_bodies/smplx_<性別>_theta0.obj 是 SMPL-X 原始座標（和 engine、capture 串流的 /mesh.obj 同一個座標），
+    _bodies/smplx_<性別>_theta0_feet0.obj 是腳底移到 y=0（GarmentCode 打版、縫合用）。
+    尺寸檔用 GarmentCode 的 mean_all.yaml（只把手臂角度改成 0）：
+    f_smpl_template.yaml 是人手量的舊量法（arm_length 80），ChatGarment 學的是 GarmentCodeData 程式自動量的
+    （mean_all 是 54），用舊的袖子會長 14～27 cm；mean_all 身高 172.0 cm，和 SMPL-X 中性 172.1 cm 幾乎一樣。
+    回傳 (腳底在 0 的 obj, 尺寸檔, 往上移了多少公尺)；匯出衣服時再往下移同樣的量，回到原始座標。
+    SMPL-X 授權禁止散布，這些身體網格只放在 output/（不上傳）。"""
+    import smplx_body
+    folder = OUT / "_bodies"
+    folder.mkdir(parents=True, exist_ok=True)
+    v, f, _ = smplx_body.make_body(gender)
+    igl.write_triangle_mesh(str(folder / f"smplx_{gender}_theta0.obj"), v, f)
+    lift = float(-v[:, 1].min())
+    feet0 = folder / f"smplx_{gender}_theta0_feet0.obj"
+    igl.write_triangle_mesh(str(feet0), v + [0.0, lift, 0.0], f)
+    body = yaml.safe_load((dm.GC_ROOT / "assets" / "bodies" / "mean_all.yaml").read_text())
+    body["body"]["arm_pose_angle"] = 0
+    yml = folder / f"smplx_{gender}_theta0.yaml"
+    yml.write_text(yaml.safe_dump(body), encoding="utf-8")
+    return feet0, yml, lift
+
+
 def pin_vertices(folder, name):
     """領口一圈（GarmentCode 標的 *_collar）＋肩線（前後片之間、位置最高的那條縫線）。"""
     labels = yaml.safe_load((folder / f"{name}_vertex_labels.yaml").read_text())

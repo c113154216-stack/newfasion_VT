@@ -48,7 +48,7 @@ def push_out(x, body_v, body_f, body_n, margin):
 
 def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step=1.0,
         iterations=400, anchor=1e-4, stretch_limit=None, stretch_weight=20.0, gravity=0.0,
-        stretch_mask=None, bend=0.0):
+        stretch_mask=None, bend=0.0, compress_limit=None, anchor_y=0.0):
     """局部－全域交替求解，最小化
         Σ w_e(|xi − xj| − 原始長度)²  ＋  body_weight · Σ|xi − 推到身體外的位置|²  ＋  gravity · Σ yi
     局部：每條邊依目前方向算出長度剛好等於原始長度的目標向量；每個頂點算出「不在身體裡」的目標位置
@@ -60,6 +60,13 @@ def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step
     stretch_limit：邊被拉長超過這個比例（例如 0.05 ＝ 5%）時，該邊的權重 w_e 改成 stretch_weight。
         推身體的權重（10）比一般邊（1）大，布料卡在肩膀、脖子這類斜面時會選擇被拉長；
         把拉太長的邊變硬，布料就改成滑開。None 表示不限制（所有邊權重 1）。
+    compress_limit：邊被壓短超過這個比例（例如 0.05 ＝ 短 5%）時，權重也改成 stretch_weight。
+        只限制拉長時，領口撐不開，衣服被身體推向脖子，袖子跟著往上滑、被擠皺（短 7～12 cm）；
+        壓短也變硬，袖子不容易被擠短。None 表示不限制。
+    stretch_limit 也可以是長度 m 的陣列，每條邊各自的限制（例如只放鬆領口那一圈）。
+    anchor_y：只在上下方向把每個頂點拉回原本的高度，懲罰 anchor_y · Σ(yi − 原高度)²。
+        GarmentCode 擺 box mesh 時高度是對的，縫合時領口卡在脖子斜坡上會把整件往上推；
+        這一項直接抵消往上推，左右前後不受影響。0 表示不加。
     stretch_mask：長度 m 的布林陣列，只有 True 的邊受 stretch_limit 限制；None 表示全部的邊。
     bend：彎曲剛度（拉普拉斯平滑），懲罰每個頂點偏離鄰居平均位置的量 bend · Σ|xi − 鄰居平均|²。
         沒有它時，布被壓縮會擠成細碎的小皺（像揉皺的紙）；加上後多出來的布會形成平順的大褶。
@@ -83,7 +90,9 @@ def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step
     else:
         bend_term = sp.csr_matrix((n, n))
     AtA = (A.T @ A + anchor * sp.identity(n) + bend_term).tocsc()
+    Y = anchor_y * sp.identity(n)  # 只加在 y 那一欄的方程組
     solve = factorized(AtA)
+    solve_y = factorized((AtA + Y).tocsc()) if anchor_y > 0 else solve
     w = np.ones(m)
 
     if body is not None:
@@ -95,8 +104,12 @@ def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step
         d = A @ x
         length = np.maximum(np.linalg.norm(d, axis=1), 1e-9)
         refactor = False
-        if stretch_limit is not None:
-            over = length > rest * (1 + stretch_limit)
+        if stretch_limit is not None or compress_limit is not None:
+            over = np.zeros(m, bool)
+            if stretch_limit is not None:
+                over |= length > rest * (1 + stretch_limit)
+            if compress_limit is not None:
+                over |= length < rest * (1 - compress_limit)
             if stretch_mask is not None:
                 over &= stretch_mask
             w_new = np.where(over, stretch_weight, 1.0)
@@ -107,6 +120,7 @@ def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step
         d *= (rest / length)[:, None]
         b = A.T @ (w[:, None] * d) + anchor * vertices
         b[:, 1] -= gravity
+        b[:, 1] += anchor_y * vertices[:, 1]
         if body is not None:
             # 只有碰到身體（在裡面或貼太近）的頂點才加這一項；沒碰到的不加，
             # 否則「目標＝自己」會變成阻力，拖慢收斂。碰到的頂點每輪不同，所以矩陣要重新分解。
@@ -114,9 +128,11 @@ def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step
             hit = np.any(target != x, axis=1).astype(float) * body_weight
             b += hit[:, None] * target
             solve = factorized((AtA + sp.diags(hit)).tocsc())
+            solve_y = factorized((AtA + sp.diags(hit) + Y).tocsc()) if anchor_y > 0 else solve
         elif refactor:
             solve = factorized(AtA)
-        x_new = np.column_stack([solve(b[:, k]) for k in range(3)])
+            solve_y = factorized((AtA + Y).tocsc()) if anchor_y > 0 else solve
+        x_new = np.column_stack([(solve_y if k == 1 else solve)(b[:, k]) for k in range(3)])
         if body is None:
             x = x_new
         else:

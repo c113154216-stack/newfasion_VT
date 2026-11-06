@@ -59,6 +59,33 @@ BATCHES = {
     },
 }
 
+# 第三批：領口比對 50 件，只有正面（docs/找圖需求_第三批_領口比對.md）。
+# 原檔名開頭的字母是領型組別（A 圓領…K 其他），新名稱拿掉組別和 _front，組別記在 results/.../labels.json
+BATCH_I = [
+    "A_blue_crew_tee", "A_brown_crew_sweatshirt", "A_green_crew_tee", "A_green_ribbed_long_sleeve_tee",
+    "A_maroon_rib_baby_tee", "A_navy_crew_sweatshirt", "A_navy_crew_tee", "A_olive_crew_long_sleeve_tee",
+    "A_pink_crew_tee", "A_red_crew_long_sleeve_tee",
+    "B_green_scoop_tee", "B_navy_scoop_long_sleeve_tee", "B_purple_scoop_tee", "B_red_scoop_tee",
+    "B_royal_scoop_dolman_tee",
+    "C_blue_deep_vneck_tee", "C_charcoal_vneck_tee", "C_green_vneck_tee", "C_grey_vneck_sweater",
+    "C_navy_vneck_tee", "C_red_deep_vneck_tee", "C_red_vneck_tee", "C_wine_vneck_sweater",
+    "D_black_square_neck_long_sleeve_top", "D_burgundy_square_neck_tank", "D_grey_square_neck_tank",
+    "D_navy_square_neck_rib_tee",
+    "E_blue_boat_neck_top", "E_green_boat_neck_sweater", "E_red_boat_neck_top", "E_teal_boat_neck_blouse",
+    "F_green_turtleneck_sweater", "F_navy_mock_neck_tee", "F_navy_turtleneck_sweater", "F_olive_mock_neck_tee",
+    "F_red_turtleneck_sweater",
+    "G_grey_henley_tee", "G_indigo_henley_tee", "G_red_henley_tee",
+    "H_charcoal_polo", "H_green_polo", "H_red_polo",
+    "I_burgundy_dress_shirt", "I_green_button_down_shirt", "I_grey_oxford_shirt",
+    "J_blue_hoodie", "J_green_hoodie", "J_red_hoodie",
+    "K_gray_off_shoulder_top", "K_red_sweetheart_neck_top",
+]
+BATCHES["i"] = {
+    "src": Path(r"C:\Users\User\Desktop\newcloth3"),
+    "dst": "inputs_i",
+    "names": {f"{s}_front": f"i{k:02d}_{s[2:]}" for k, s in enumerate(BATCH_I, 1)},
+}
+
 
 def flatten(im):
     """透明背景填上對比色；沒有透明就直接轉 RGB。"""

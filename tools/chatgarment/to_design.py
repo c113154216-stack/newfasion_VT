@@ -10,7 +10,7 @@
   fix_collar      領子配件（描述寫圓領，版型卻多了翻領／高領）
   fix_neck_shape  領口形狀（描述寫圓領，版型卻是方領；描述寫 V 領，版型卻是圓領）
   fix_sleeveless  有沒有袖子（描述寫短袖，版型卻是無袖）
-  fix_cuff        袖口（描述寫羅紋袖口，版型卻沒有袖口布、不收褶）
+  fix_cuff        袖口縮口（描述寫 ribbed cuffs，版型卻沒有縮口）
 
 要用 GarmentCode 的 .venv（不是 .venv-chatgarment）：
     .venv\\Scripts\\python tools\\chatgarment\\to_design.py <infer.py 的輸出資料夾> [--no-mesh]
@@ -126,32 +126,23 @@ def fix_sleeveless(design, styles):
     return have, want
 
 
-# 袖口：描述的字眼 → (袖口布種類, 收褶倍數, 袖口布長)。
-# 收褶＝袖子末端周長 ÷ 袖口布周長，大於 1 就是袖子在袖口被收起來（縮口）；GarmentCode 會保證袖口布不小於手腕。
-# 袖口布長乘上手臂長（平均男性 56.8 cm），而且從袖子本身扣掉，總袖長不變。
-CUFF_RULES = [
-    (("ribbed cuff", "rib cuff", "elastic cuff", "elasticated cuff", "knit cuff"), ("CuffBand", 1.8, 0.12)),  # 羅紋縮口：帽 T、長袖 T、毛衣
-    (("cuffed sleeve", "button cuff", "buttoned cuff", "cuffs"), ("CuffBand", 1.3, 0.10)),                   # 襯衫袖口：收一點
-]
+CUFF_RUFFLE = 1.7  # 袖子末端收皺倍數：縮口一圈＝袖子末端一圈 ÷ 1.7，g03 試過剛好等於手臂粗細（AI 都給 1，等於沒收）
 
 
 def fix_cuff(design, styles):
-    """袖口也是「描述對、版型錯」：長袖的描述幾乎都寫 ribbed cuffs（羅紋袖口）或 cuffed sleeves，
-    AI 給的版型卻一律是沒有袖口布、不收褶（訓練資料的上衣大多用預設值），做出來是直筒、喇叭狀的袖口。
-    以描述為準加上袖口布並收褶。只處理有袖子的衣服；描述沒提到袖口就不改。回傳 (舊, 新) 或 None。"""
-    if design["sleeve"]["sleeveless"]["v"]:
+    """袖口縮口：描述幾乎都寫 ribbed cuffs，參數卻從來不選；少數選了的又是描述沒寫的短袖、無袖。
+    以描述為準：長袖（sleeve.length ≥ 0.6）且描述有寫 cuff → CuffBand 並收皺 1.7 倍；描述沒寫 → 不要縮口。
+    第三批 50 件照片比對：對 34 → 44（多做 4 件、漏 2 件描述沒寫的）。回傳 (舊, 新) 或 None。"""
+    sl = design["sleeve"]
+    long_sleeve = not sl["sleeveless"]["v"] and sl["length"]["v"] >= 0.6
+    want = "CuffBand" if long_sleeve and "cuff" in " ".join(styles.get("extra") or []).lower() else None
+    have = sl["cuff"]["type"]["v"]
+    if want == "CuffBand":
+        sl["cuff"]["top_ruffle"]["v"] = CUFF_RUFFLE
+    if have == want:
         return None
-    text = " ".join((styles.get("sleeves") or []) + (styles.get("extra") or [])).lower()
-    rule = next((r for keys, r in CUFF_RULES if any(k in text for k in keys)), None)
-    if rule is None:
-        return None
-    cuff = design["sleeve"]["cuff"]
-    kind, ruffle, length = rule
-    have = (cuff["type"]["v"], cuff["top_ruffle"]["v"])
-    if have == (kind, ruffle):
-        return None
-    cuff["type"]["v"], cuff["top_ruffle"]["v"], cuff["cuff_len"]["v"] = kind, ruffle, length
-    return f"{have[0]}、收褶 {have[1]:.1f}", f"{kind}、收褶 {ruffle}"
+    sl["cuff"]["type"]["v"] = want
+    return have, want
 
 
 def to_designs(gu, result_dir):
@@ -176,8 +167,7 @@ def to_designs(gu, result_dir):
             desc = read_description(result_dir)
             key = "upperbody_garment" if name == "upper" else "wholebody_garment"
             styles = (desc.get(key) or {}).get("geometry_styles", {})
-            for label, fix in (("領子配件", fix_collar), ("領口形狀", fix_neck_shape), ("無袖", fix_sleeveless),
-                               ("袖口", fix_cuff)):
+            for label, fix in (("領子配件", fix_collar), ("領口形狀", fix_neck_shape), ("無袖", fix_sleeveless), ("袖口縮口", fix_cuff)):
                 changed = fix(design, styles)
                 if changed:
                     FIXED.add(result_dir.name)
