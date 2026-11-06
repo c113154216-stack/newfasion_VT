@@ -7,6 +7,8 @@
   2. 領深校正（neckline.py，照 mean_all 尺寸重算）
   3. 先用 AI 原本的衣長縫一次，量「縫合往上提」多少
   4. 衣長校正（hemline.py）：目標下襬 ＝（AI 縫好的下襬 ＋ 款式規則下襬）÷ 2，差超過 1 cm 再修正一次
+     袖長規則（sleevelen.py）：描述是長袖的，同一次縫合量袖口離手腕，把 sleeve.length 調到袖口到手腕，差超過 1 cm 再修正一次；
+     短袖、無袖照 AI 的參數
   5. 縫合：新縫合（拉長超過 2% 變硬、彎曲剛度 1）＋壓短限制 2%（袖子不被擠短）
   6. 匯出：公尺、往下移回 SMPL-X 原始座標（和 engine 的身體同一個座標，不用再對齊）、
      固定點 neck_shoulder_band 照 engine/cloth/attachment.py 的規則（SMPL-X 蒙皮權重最大的關節是頸或左右鎖骨、離身體 1 cm 內）
@@ -38,6 +40,7 @@ from assets.garment_programs.meta_garment import MetaGarment  # noqa: E402
 from export_for_physics import pin_vertices, prepare_smplx_body  # noqa: E402
 from hemline import correct, pattern_hem, plan  # noqa: E402
 from neckline import fix_neck_depth  # noqa: E402
+import sleevelen  # noqa: E402
 from sew import mesh_edges, rest_lengths, sew, write_obj_with_new_positions  # noqa: E402
 
 OUT = dm.REPO / "output" / "physics_export" / "neutral"
@@ -68,14 +71,16 @@ def load_design(result_dir):
 
 
 def build(design, name, body_yaml, body_mesh):
-    """生成版片、縫合；回傳 (資料夾, 縫好的頂點 cm, 面)。"""
+    """生成版片、縫合；回傳 (資料夾, 縫好的頂點 cm, 面, 縫合前的頂點 cm, 袖子頂點遮罩)。"""
     _, _, paths = dm.generate(design, body_yaml, name, resolution=RESOLUTION)
     v, f = igl.read_triangle_mesh(str(paths.g_box_mesh))
     edges = mesh_edges(f)
     rest = rest_lengths(v, edges, pickle.loads(paths.g_orig_edge_len.read_bytes()))
     x = sew(v, edges, rest, body=body_mesh, **SEW)
     write_obj_with_new_positions(paths.g_box_mesh, paths.g_box_mesh.with_name(f"{name}_sewn.obj"), x)
-    return paths.g_box_mesh.parent, x, f
+    folder = paths.g_box_mesh.parent
+    sleeve = sleevelen.sleeve_mask((folder / f"{name}_sim_segmentation.txt").read_text().splitlines())
+    return folder, x, f, v, sleeve
 
 
 def band_pins(x, bv, bf, weights):
@@ -85,7 +90,7 @@ def band_pins(x, bv, bf, weights):
     return np.flatnonzero(yoke[bf[face]].all(axis=1) & (np.sqrt(d2) <= CONTACT_M)).tolist()
 
 
-def export_one(result_dir, body, body_yaml, body_mesh, smplx, lift):
+def export_one(result_dir, body, body_yaml, body_mesh, smplx, lift, arm):
     g = result_dir.name
     design = load_design(result_dir)
     if design is None or not design["meta"]["upper"]["v"]:
@@ -100,25 +105,39 @@ def export_one(result_dir, body, body_yaml, body_mesh, smplx, lift):
     fitted = probe["meta"]["upper"]["v"] == "FittedShirt"
     if fitted:
         probe["meta"]["upper"]["v"] = "Shirt"
-    _, x, _ = build(probe, f"nx_{g}_base", body_yaml, body_mesh)
+    _, x, _, _, sleeve = build(probe, f"nx_{g}_base", body_yaml, body_mesh)
     base_hem = float(x[:, 1].min())
     rise = base_hem - pattern_hem(probe, body, MetaGarment)
+    sl = sleevelen.plan(design, styles, sleevelen.reach(x, sleeve, arm), body["arm_length"])
 
     info = plan(design, body, MetaGarment, styles, garment_name,
                 ai_sewn_hem=None if fitted else base_hem, lift=rise)
     name = f"nx_{g}"
-    folder, x, f = build(design, name, body_yaml, body_mesh)
+    folder, x, f, _, sleeve = build(design, name, body_yaml, body_mesh)
     hem = float(x[:, 1].min())
+    cuff = sleevelen.reach(x, sleeve, arm)
+    hem_off = info is not None and abs(hem - info["_target"]) > TOLERANCE_CM
+    cuff_off = sl is not None and cuff is not None and abs(cuff - sl["_target"]) > sleevelen.TOLERANCE_CM
+    hem_passes, cuff_passes = [round(hem, 1)], [None if cuff is None else round(cuff, 1)]
+    if hem_off or cuff_off:  # 衣長、袖長任一個差超過 1 cm，兩個一起修正、再縫一次
+        if hem_off:
+            correct(design, info, hem)
+        if cuff_off:
+            sleevelen.correct(design, sl, cuff)
+        folder, x, f, _, sleeve = build(design, name, body_yaml, body_mesh)
+        hem = float(x[:, 1].min())
+        cuff = sleevelen.reach(x, sleeve, arm)
+        hem_passes.append(round(hem, 1))
+        cuff_passes.append(None if cuff is None else round(cuff, 1))
+    if sl is None:
+        sleeve_report = "不是長袖（或沒有袖子），照 AI 的袖長"
+    else:
+        sl["縫好的袖口離手腕 cm（每一輪）"] = cuff_passes
+        sleeve_report = {k: v for k, v in sl.items() if not k.startswith("_")}
     if info is None:
         hem_report = "沒有對應的規則，衣長不改"
     else:
-        passes = [round(hem, 1)]
-        if abs(hem - info["_target"]) > TOLERANCE_CM:
-            correct(design, info, hem)
-            folder, x, f = build(design, name, body_yaml, body_mesh)
-            hem = float(x[:, 1].min())
-            passes.append(round(hem, 1))
-        info["縫好的下襬 cm（每一輪）"] = passes
+        info["縫好的下襬 cm（每一輪）"] = hem_passes
         info["最終衣長參數"] = round(float(design["shirt"]["length"]["v"]), 3)
         hem_report = {k: v for k, v in info.items() if not k.startswith("_")}
 
@@ -144,7 +163,8 @@ def export_one(result_dir, body, body_yaml, body_mesh, smplx, lift):
     inside = igl.fast_winding_number_for_meshes(bv, bf, xm) > 0.5
     check = {"穿進身體的頂點%": round(100 * float(inside.mean()), 2),
              "離身體距離中位數 cm": round(float(np.median(dist)), 1),
-             "下襬離地 cm": round(hem, 1)}
+             "下襬離地 cm": round(hem, 1),
+             "袖口離手腕 cm": None if cuff is None else round(cuff, 1)}
     (dst / f"{g}_pins.json").write_text(json.dumps({
         "units": "m", "up_axis": "+y", "front_axis": "+z",
         "coordinates": "SMPL-X 原始座標（neutral、θ=0、β 全 0，和 engine 的身體相同，不用再平移對齊）",
@@ -157,10 +177,11 @@ def export_one(result_dir, body, body_yaml, body_mesh, smplx, lift):
         "note": "頂點編號 0 起算，順序和 OBJ 的 v 行相同",
     }, ensure_ascii=False, indent=1), encoding="utf-8")
     (dst / "fix.json").write_text(json.dumps(
-        {"衣長校正": hem_report, "領口校正": neck, "縫合": SEW, "縫合往上提 cm": round(rise, 1)},
+        {"衣長校正": hem_report, "袖長規則": sleeve_report, "領口校正": neck, "縫合": SEW, "縫合往上提 cm": round(rise, 1)},
         ensure_ascii=False, indent=2), encoding="utf-8")
     (dst / "design_used.yaml").write_text(yaml.safe_dump({"design": design}, allow_unicode=True), encoding="utf-8")
-    print(f"[{g}] {len(xm)} 頂點、固定點 {len(band)}、下襬 {hem:.1f} cm、穿進身體 {check['穿進身體的頂點%']}%"
+    print(f"[{g}] {len(xm)} 頂點、固定點 {len(band)}、下襬 {hem:.1f} cm、袖口離手腕 {check['袖口離手腕 cm']}、"
+          f"穿進身體 {check['穿進身體的頂點%']}%"
           f"（{time.time() - t0:.0f} 秒）", flush=True)
     return check
 
@@ -172,11 +193,12 @@ def main(results, *only):
     bv, bf = igl.read_triangle_mesh(str(body_obj))
     body_mesh = (bv * 100, bf)
     v0, f0, weights = smplx_body.make_body("neutral")
+    arm = sleevelen.arms(lift)
     for result_dir in sorted(p for p in (CWD / results).iterdir() if p.is_dir()):
         if only and result_dir.name not in only:
             continue
         try:
-            export_one(result_dir, body, body_yaml, body_mesh, (v0, f0, weights), lift)
+            export_one(result_dir, body, body_yaml, body_mesh, (v0, f0, weights), lift, arm)
         except Exception as e:  # 一件失敗不中斷整批
             print(f"[{result_dir.name}] 失敗：{e!r}", flush=True)
 
