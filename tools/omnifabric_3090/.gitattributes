@@ -1,0 +1,3 @@
+# 這些腳本在 Linux（3090）上執行，Windows 取出時也要保持 LF，否則 bash 會因為 \r 出錯
+*.sh text eol=lf
+*.py text eol=lf
