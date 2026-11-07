@@ -20,10 +20,11 @@ import smplx_body
 TOLERANCE_CM = 1.0
 
 
-def arms(lift):
-    """{x 正負號: (肩關節, 手臂方向, 手腕在方向上的位置)}，單位 cm、腳底在 0（lift 是腳底往上移的公尺數）。"""
-    model = smplx_body.load_model("neutral")
-    v, _, _ = smplx_body.make_body("neutral")
+def arms(lift, gender="neutral", betas=None):
+    """{x 正負號: (肩關節, 手臂方向, 手腕在方向上的位置)}，單位 cm、腳底在 0（lift 是腳底往上移的公尺數）。
+    gender、betas：縫衣服用的 SMPL-X 身體；換成使用者的體型時傳他的 betas（和 smplx_body.make_body 相同）。"""
+    model = smplx_body.load_model(gender)
+    v, _, _ = smplx_body.make_body(gender, betas)
     J = (model["J_regressor"] @ v + [0.0, lift, 0.0]) * 100
     out = {}
     for shoulder, wrist in ((16, 20), (17, 21)):

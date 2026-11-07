@@ -143,6 +143,49 @@ def sew(vertices, edges, rest, body=None, margin=0.5, body_weight=10.0, max_step
     return x
 
 
+def folded_faces(x, faces, cos_limit=-0.5):
+    """和相鄰面法向夾角超過 120°（cos < −0.5）的面：單一個三角形翻成尖角，真的布折不出這種形狀。"""
+    n = igl.per_face_normals(x, faces, np.array([0.0, 0.0, 1.0]))
+    tt, _ = igl.triangle_triangle_adjacency(faces)
+    bad = set()
+    for k in range(3):
+        ok = np.flatnonzero(tt[:, k] >= 0)
+        hit = ok[(n[ok] * n[tt[ok, k]]).sum(1) < cos_limit]
+        bad.update(hit.tolist())
+        bad.update(tt[hit, k].tolist())
+    return np.array(sorted(bad), dtype=int)
+
+
+def unfold(x, faces, body=None, margin=0.5, rounds=6, steps=5, max_ring=None):
+    """縫完後把尖角三角形攤平：只動反折面的頂點和周圍幾圈，往鄰居平均位置拉（局部 Laplacian 平滑），
+    再推回身體外。還有反折就把範圍往外擴一圈再做，最多 rounds 輪。回傳 (新位置, 說明 dict)。
+    body：(頂點, 面)，和 x 同單位；給了才會推回身體外。
+    max_ring：範圍最多擴到第幾圈鄰居（None＝不限）；限制越小，附近的真皺褶留得越多。"""
+    x = x.copy()
+    adj = igl.adjacency_list(faces)
+    if body is not None:
+        body_v, body_f = body
+        body_n = igl.per_face_normals(body_v, body_f, np.array([0.0, 0.0, 1.0]))
+    before = folded_faces(x, faces)
+    bad, start, region = before, x.copy(), set()
+    for r in range(rounds):
+        if len(bad) == 0:
+            break
+        region = set(faces[bad].ravel().tolist())
+        for _ in range(r + 1 if max_ring is None else min(r + 1, max_ring)):  # 第 r 輪擴到第 r＋1 圈鄰居
+            region |= {j for i in region for j in adj[i]}
+        idx = np.array(sorted(region))
+        for _ in range(steps):
+            avg = np.array([x[adj[i]].mean(0) for i in idx])
+            x[idx] = 0.5 * x[idx] + 0.5 * avg
+            if body is not None:
+                x[idx] = push_out(x[idx], body_v, body_f, body_n, margin)
+        bad = folded_faces(x, faces)
+    moved = np.linalg.norm(x - start, axis=1)
+    return x, {"反折面": [int(len(before)), int(len(bad))], "動到的頂點": int((moved > 1e-9).sum()),
+               "最大位移": round(float(moved.max()), 2)}
+
+
 def write_obj_with_new_positions(src, dst, vertices):
     """沿用原 OBJ 的 vt、f、mtl，只把 v 行換成新位置。"""
     out, k = [], 0

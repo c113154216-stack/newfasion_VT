@@ -9,7 +9,8 @@
   4. 衣長校正（hemline.py）：目標下襬 ＝（AI 縫好的下襬 ＋ 款式規則下襬）÷ 2，差超過 1 cm 再修正一次
      袖長規則（sleevelen.py）：描述是長袖的，同一次縫合量袖口離手腕，把 sleeve.length 調到袖口到手腕，差超過 1 cm 再修正一次；
      短袖、無袖照 AI 的參數
-  5. 縫合：新縫合（拉長超過 2% 變硬、彎曲剛度 1）＋壓短限制 2%（袖子不被擠短）
+  5. 縫合：新縫合（拉長超過 2% 變硬、彎曲剛度 1）＋壓短限制 2%（袖子不被擠短）；
+     縫完把縫線交會處翻成尖角的三角形局部平滑攤平（sew.unfold）
   6. 匯出：公尺、往下移回 SMPL-X 原始座標（和 engine 的身體同一個座標，不用再對齊）、
      固定點 neck_shoulder_band 照 engine/cloth/attachment.py 的規則（SMPL-X 蒙皮權重最大的關節是頸或左右鎖骨、離身體 1 cm 內）
 
@@ -41,7 +42,7 @@ from export_for_physics import pin_vertices, prepare_smplx_body  # noqa: E402
 from hemline import correct, pattern_hem, plan  # noqa: E402
 from neckline import fix_neck_depth  # noqa: E402
 import sleevelen  # noqa: E402
-from sew import mesh_edges, rest_lengths, sew, write_obj_with_new_positions  # noqa: E402
+from sew import mesh_edges, rest_lengths, sew, unfold, write_obj_with_new_positions  # noqa: E402
 
 OUT = dm.REPO / "output" / "physics_export" / "neutral"
 SEW = {"stretch_limit": 0.02, "stretch_weight": 100.0, "bend": 1.0, "compress_limit": 0.02}
@@ -141,6 +142,9 @@ def export_one(result_dir, body, body_yaml, body_mesh, smplx, lift, arm):
         info["最終衣長參數"] = round(float(design["shirt"]["length"]["v"]), 3)
         hem_report = {k: v for k, v in info.items() if not k.startswith("_")}
 
+    # 縫線交會處會有單一三角形翻成尖角（和鄰面夾角 >120°），局部平滑攤平再推回身體外
+    x, unfolded = unfold(x, f, body=body_mesh)
+
     # 匯出：公分 → 公尺，往下移回 SMPL-X 原始座標
     xm = x / 100.0 - [0.0, lift, 0.0]
     dst = OUT / g
@@ -177,7 +181,8 @@ def export_one(result_dir, body, body_yaml, body_mesh, smplx, lift, arm):
         "note": "頂點編號 0 起算，順序和 OBJ 的 v 行相同",
     }, ensure_ascii=False, indent=1), encoding="utf-8")
     (dst / "fix.json").write_text(json.dumps(
-        {"衣長校正": hem_report, "袖長規則": sleeve_report, "領口校正": neck, "縫合": SEW, "縫合往上提 cm": round(rise, 1)},
+        {"衣長校正": hem_report, "袖長規則": sleeve_report, "領口校正": neck, "縫合": SEW, "縫合往上提 cm": round(rise, 1),
+         "尖角攤平": unfolded},
         ensure_ascii=False, indent=2), encoding="utf-8")
     (dst / "design_used.yaml").write_text(yaml.safe_dump({"design": design}, allow_unicode=True), encoding="utf-8")
     print(f"[{g}] {len(xm)} 頂點、固定點 {len(band)}、下襬 {hem:.1f} cm、袖口離手腕 {check['袖口離手腕 cm']}、"
