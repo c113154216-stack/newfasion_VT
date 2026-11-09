@@ -1,7 +1,7 @@
 #!/bin/bash
 # 一次跑一整個資料夾的衣服，跑完把要帶回來的檔案收進 <輸出>/collect/。
 #
-#   bash lowvram/batch_3090.sh <照片資料夾> [輸出資料夾，預設 outputs/batch]
+#   bash lowvram/batch_3090.sh <照片資料夾> [輸出資料夾，預設 outputs/batch] [只跑名稱開頭是這個的，例如 h05]
 #
 # 照片命名：<衣服>_front.jpg（必要）、<衣服>_back.jpg（可以沒有，沒有就由 AI 推測背面）；png、jpg、jpeg、webp 都可以。
 # 一件失敗不會中斷整批，最後列出失敗的衣服；log 在 <輸出>/<衣服>.log。
@@ -18,7 +18,7 @@ cd "$(dirname "$0")/.."
 mkdir -p "$OUT/collect"
 failed=()
 
-for FRONT in "$PHOTOS"/*_front.*; do
+for FRONT in "$PHOTOS"/${3}*_front.*; do
     [[ -f "$FRONT" ]] || continue
     NAME=$(basename "$FRONT"); NAME=${NAME%_front.*}
     BACK=$(ls "$PHOTOS/${NAME}_back."* 2>/dev/null | head -n 1)

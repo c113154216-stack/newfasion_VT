@@ -13,7 +13,8 @@ set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 DEST=$(realpath -m "${1:-$HOME/OmniFabric}")
 COMMIT=205c17947e71bc57af2823528271617ea04ef389   # 2026-11-02，這份腳本是照這一版改的
-export CUDA_HOME=${CUDA_HOME:-/usr/local/cuda-11.8}
+# CUDA 11.8 toolkit：有 /usr/local/cuda-11.8 就用；沒有就在 conda 環境裡裝一份（不用 sudo）
+[[ -z "$CUDA_HOME" && -x /usr/local/cuda-11.8/bin/nvcc ]] && export CUDA_HOME=/usr/local/cuda-11.8
 
 echo "== 1. 下載 OmniFabric（固定版本 ${COMMIT:0:7}）到 $DEST"
 if [[ ! -d "$DEST" ]]; then
@@ -25,7 +26,14 @@ echo "== 2. 建 conda 環境並安裝（不編譯 flash-attn，省 2 小時；Ch
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda env list | grep -q "^omnifabric " || conda env create -f "$DEST/environment.yml"
 conda activate omnifabric
-(cd "$DEST" && bash install.sh --no-flash-attn)
+if [[ -z "$CUDA_HOME" ]]; then
+    [[ -x "$CONDA_PREFIX/bin/nvcc" ]] || conda install -y -c nvidia/label/cuda-11.8.0 cuda-toolkit
+    export CUDA_HOME=$CONDA_PREFIX
+fi
+if [[ ! -f "$DEST/.installed_3090" ]]; then   # 裝過就跳過（重跑 setup 只會補權重、更新 lowvram/）
+    (cd "$DEST" && bash install.sh --no-flash-attn)
+    touch "$DEST/.installed_3090"
+fi
 
 echo "== 3. 放進 24 GB 版本（lowvram/）"
 mkdir -p "$DEST/lowvram"
@@ -33,6 +41,10 @@ cp "$HERE/lowvram/"*.py "$HERE/run_3090.sh" "$HERE/batch_3090.sh" "$DEST/lowvram
 
 echo "== 4. 權重"
 mkdir -p "$DEST/checkpoints/chatgarment" "$DEST/checkpoints/omnifabric"
+if [[ -z "$CHATGARMENT_BIN" ]]; then   # 沒指定就在家目錄找 3090 上已經有的那份（大於 10 GB 的 pytorch_model.bin）
+    CHATGARMENT_BIN=$(find "$HOME" -maxdepth 6 -name pytorch_model.bin -size +10G 2>/dev/null | grep -i chatgarment | head -n 1)
+    [[ -n "$CHATGARMENT_BIN" ]] && echo "  找到 ChatGarment 權重：$CHATGARMENT_BIN"
+fi
 if [[ -n "$CHATGARMENT_BIN" && -f "$CHATGARMENT_BIN" && ! -e "$DEST/checkpoints/chatgarment/pytorch_model.bin" ]]; then
     ln -s "$(realpath "$CHATGARMENT_BIN")" "$DEST/checkpoints/chatgarment/pytorch_model.bin"
 fi
@@ -43,8 +55,11 @@ if [[ ! -e "$DEST/checkpoints/chatgarment/pytorch_model.bin" ]]; then
     echo "  下載成 $DEST/checkpoints/chatgarment/pytorch_model.bin"
     missing=1
 fi
+if [[ ! -f "$DEST/checkpoints/omnifabric/default.safetensors" ]]; then   # Google Drive 自動下載
+    pip install -q gdown && gdown 1qMdaFTy8Mbh4yGcm41FE4iMOqUrGIp9k -O "$DEST/checkpoints/omnifabric/default.safetensors" || true
+fi
 if [[ ! -f "$DEST/checkpoints/omnifabric/default.safetensors" ]]; then
-    echo "  缺 OmniFabric LoRA：從"
+    echo "  缺 OmniFabric LoRA（自動下載失敗）：從"
     echo "    https://drive.google.com/file/d/1qMdaFTy8Mbh4yGcm41FE4iMOqUrGIp9k/view?usp=sharing"
     echo "  下載成 $DEST/checkpoints/omnifabric/default.safetensors"
     missing=1
@@ -55,6 +70,7 @@ if ! huggingface-cli whoami > /dev/null 2>&1; then
 fi
 
 echo ""
+[[ $missing == 0 ]] || { echo "上面列出的東西補齊後，再跑一次同一個指令。"; exit 2; }
 if [[ $missing == 0 ]]; then
     echo "安裝完成。試跑一件："
 else

@@ -6,10 +6,33 @@
 
 ---
 
+## 最快的跑法（2026-11-09 簡化）
+
+3090 上只要做這些，其他（下載 OmniFabric、建環境、CUDA 11.8、LoRA、找 ChatGarment 權重、整批跑、收檔）`go.sh` 都會自動做：
+
+1. **（只做一次，要你自己按）** 到 Hugging Face 同意 [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev)、[FLUX.2-dev](https://huggingface.co/black-forest-labs/FLUX.2-dev) 的授權，在 3090 上 `huggingface-cli login`
+2. 把 Windows 這台的 `output/omnifabric_photos.zip`（第二批 12 件正＋背面照，已改好檔名）複製到 3090 家目錄，`unzip omnifabric_photos.zip`
+3. 3090 上 `git pull` 這個 repo，然後：
+
+```bash
+cd tools/omnifabric_3090
+nano config.sh          # 看一下路徑；HF_HOME 要指到有 160 GB 空位的地方
+bash go.sh h05          # 先跑一件（襯衫，有背面照）
+bash go.sh              # 沒問題再跑全部
+```
+
+- 缺東西會停下來列出缺什麼，補齊後**重跑同一個指令**；中斷了也是重跑，會接著做
+- 跑完帶回 `~/omnifabric_out/collect/`；出錯帶回 `~/omnifabric_out/setup.log` 或 `<衣服>.log` 最後 50 行
+
+下面是各步驟的細節，`go.sh` 出問題時才需要看。
+
+---
+
 ## 這個資料夾有什麼
 
 | 檔案 | 做什麼 |
 |---|---|
+| `go.sh`、`config.sh` | **一個指令跑完**：讀 config.sh 的路徑 → 安裝（裝過跳過）→ 整批跑 → 收檔 |
 | `setup_3090.sh` | 一次裝好：下載 OmniFabric（固定版本）、建 conda 環境、安裝、放進下面的檔案、檢查權重 |
 | `run_3090.sh` | 跑一件衣服：`正面照 [背面照] → 版片＋UV 貼圖＋3D` |
 | `batch_3090.sh` | 跑一整個資料夾，跑完把要帶回來的檔案收進 `collect/` |
