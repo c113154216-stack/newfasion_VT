@@ -12,6 +12,8 @@ x() { eval echo "$1"; }   # 展開 ~
 OMNI_DIR=$(x "$OMNI_DIR"); PHOTOS=$(x "$PHOTOS"); OUT=$(x "$OUT")
 export HF_HOME=$(x "$HF_HOME") CHATGARMENT_BIN=$(x "$CHATGARMENT_BIN") GARMENTS
 mkdir -p "$HF_HOME" "$OUT"
+# huggingface-cli login 預設把 token 存在 ~/.cache/huggingface/token；改了 HF_HOME 就要複製過去
+[ -f "$HF_HOME/token" ] || [ ! -f ~/.cache/huggingface/token ] || cp ~/.cache/huggingface/token "$HF_HOME/token"
 
 [[ -d "$PHOTOS" ]] || { echo "找不到照片資料夾 $PHOTOS（改 config.sh 的 PHOTOS）"; exit 1; }
 command -v conda > /dev/null || { echo "沒有 conda：先裝 Miniconda https://docs.anaconda.com/miniconda/"; exit 1; }

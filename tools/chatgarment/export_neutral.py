@@ -10,7 +10,7 @@
      袖長規則（sleevelen.py）：描述是長袖的，同一次縫合量袖口離手腕，把 sleeve.length 調到袖口到手腕，差超過 1 cm 再修正一次；
      短袖、無袖照 AI 的參數
   5. 縫合：新縫合（拉長超過 2% 變硬、彎曲剛度 1）＋壓短限制 2%（袖子不被擠短）；
-     縫完把縫線交會處翻成尖角的三角形局部平滑攤平（sew.unfold）
+     縫完先統一三角形方向（sew.orient_faces，翻領、前襟版片原本相反），再把縫線交會處翻成尖角的三角形局部平滑攤平（sew.unfold）
   6. 匯出：公尺、往下移回 SMPL-X 原始座標（和 engine 的身體同一個座標，不用再對齊）、
      固定點 neck_shoulder_band 照 engine/cloth/attachment.py 的規則（SMPL-X 蒙皮權重最大的關節是頸或左右鎖骨、離身體 1 cm 內）
 
@@ -42,7 +42,7 @@ from export_for_physics import pin_vertices, prepare_smplx_body  # noqa: E402
 from hemline import correct, pattern_hem, plan  # noqa: E402
 from neckline import fix_neck_depth  # noqa: E402
 import sleevelen  # noqa: E402
-from sew import mesh_edges, rest_lengths, sew, unfold, write_obj_with_new_positions  # noqa: E402
+from sew import mesh_edges, orient_faces, rest_lengths, sew, unfold, write_obj_with_new_positions  # noqa: E402
 
 OUT = dm.REPO / "output" / "physics_export" / "neutral"
 SEW = {"stretch_limit": 0.02, "stretch_weight": 100.0, "bend": 1.0, "compress_limit": 0.02}
@@ -50,6 +50,8 @@ RESOLUTION = 2.0  # 頂點間距（cm），約 2,000～4,000 頂點
 TOLERANCE_CM = 1.0
 YOKE_JOINTS = (12, 13, 14)  # 頸、左右鎖骨（和 engine/cloth/attachment.py 相同）
 CONTACT_M = 0.01
+HOOD_CROWN_M = 0.05  # 帽子固定點：帽子頂點中比頭頂低不到 5 cm（帽頂那一片）
+HOOD_CONTACT_M = 0.03  # 而且離頭 3 cm 內（帽子縫好時比頭頂高約 4 cm，1 cm 內太少）
 
 
 def description(result_dir):
@@ -82,6 +84,19 @@ def build(design, name, body_yaml, body_mesh):
     folder = paths.g_box_mesh.parent
     sleeve = sleevelen.sleeve_mask((folder / f"{name}_sim_segmentation.txt").read_text().splitlines())
     return folder, x, f, v, sleeve
+
+
+def hood_pins(x, seg_lines, bv):
+    """帽子「戴著」用的固定點（`hood` 組，2026-11-11 和紀泓宇約定）：帽子版片（*_hood）的頂點中，
+    比頭頂低不到 HOOD_CROWN_M、離身體 HOOD_CONTACT_M 內的 —— 帽頂貼著頭的那一片。engine 跟 neck_shoulder_band 合併使用。
+    x：公尺、SMPL-X 原始座標；沒有帽子回傳 None。"""
+    hood = np.array(["hood" in s for s in seg_lines])
+    if not hood.any():
+        return None
+    bv_, bf_ = bv
+    d = np.sqrt(igl.point_mesh_squared_distance(x, bv_, bf_)[0])
+    top = float(bv_[:, 1].max())
+    return np.flatnonzero(hood & (x[:, 1] > top - HOOD_CROWN_M) & (d <= HOOD_CONTACT_M)).tolist()
 
 
 def band_pins(x, bv, bf, weights):
@@ -142,14 +157,17 @@ def export_one(result_dir, body, body_yaml, body_mesh, smplx, lift, arm):
         info["最終衣長參數"] = round(float(design["shirt"]["length"]["v"]), 3)
         hem_report = {k: v for k, v in info.items() if not k.startswith("_")}
 
+    # 翻領、前襟版片的三角形方向和其他版片相反 → 統一（不然縫線兩側法向相反，也會被誤判成尖角）
+    f, flip = orient_faces(f)
     # 縫線交會處會有單一三角形翻成尖角（和鄰面夾角 >120°），局部平滑攤平再推回身體外
     x, unfolded = unfold(x, f, body=body_mesh)
+    unfolded["翻轉方向的面"] = int(len(flip))
 
     # 匯出：公分 → 公尺，往下移回 SMPL-X 原始座標
     xm = x / 100.0 - [0.0, lift, 0.0]
     dst = OUT / g
     dst.mkdir(parents=True, exist_ok=True)
-    write_obj_with_new_positions(folder / f"{name}_sewn.obj", dst / f"{g}.obj", xm)
+    write_obj_with_new_positions(folder / f"{name}_sewn.obj", dst / f"{g}.obj", xm, flip)
     for extra in ("_material.mtl", "_texture_fabric.png"):
         src = folder / f"{name}{extra}"
         if src.exists():
@@ -163,6 +181,7 @@ def export_one(result_dir, body, body_yaml, body_mesh, smplx, lift, arm):
     bv, bf, weights = smplx
     band = band_pins(xm, bv, bf, weights)
     neckline, shoulder = pin_vertices(folder, name)
+    hood = hood_pins(xm, (folder / f"{name}_sim_segmentation.txt").read_text().splitlines(), (bv, bf))
     dist = np.sqrt(igl.point_mesh_squared_distance(xm, bv, bf)[0]) * 100
     inside = igl.fast_winding_number_for_meshes(bv, bf, xm) > 0.5
     check = {"穿進身體的頂點%": round(100 * float(inside.mean()), 2),
@@ -176,7 +195,8 @@ def export_one(result_dir, body, body_yaml, body_mesh, smplx, lift, arm):
         "n_vertices": int(len(xm)), "n_faces": int(len(f)), "has_uv": True, "resolution_cm": RESOLUTION,
         "pins": {"neck_shoulder_band": band,  # 建議用這組：和 engine/cloth/attachment.py 的 yoke_vertices 同規則
                  "neckline": neckline, "shoulder": shoulder,
-                 "neckline_and_shoulder": sorted(set(neckline) | set(shoulder))},
+                 "neckline_and_shoulder": sorted(set(neckline) | set(shoulder)),
+                 **({"hood": hood} if hood else {})},  # 帽子戴著：engine 和 neck_shoulder_band 合併使用
         "check": check,
         "note": "頂點編號 0 起算，順序和 OBJ 的 v 行相同",
     }, ensure_ascii=False, indent=1), encoding="utf-8")

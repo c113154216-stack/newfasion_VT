@@ -156,6 +156,22 @@ def folded_faces(x, faces, cos_limit=-0.5):
     return np.array(sorted(bad), dtype=int)
 
 
+def orient_faces(faces):
+    """把所有三角形的方向（頂點順序）統一。GarmentCode 的翻領、前襟版片（*_collar_front 等）三角形順序和其他版片相反，
+    縫起來之後縫線兩側的面法向相反：engine 的碰撞靠面的方向判斷，folded_faces 也會把這些面誤判成尖角（2026-11-11 發現）。
+    用 igl.bfs_orient 沿相鄰面統一，取原本多數面的方向。回傳 (統一後的面, 被翻轉的面編號)。"""
+    ff, _ = igl.bfs_orient(faces)
+    same = np.zeros(len(faces), dtype=bool)  # ff 是不是原本順序的循環排列（＝方向沒變）
+    for s in range(3):
+        same |= np.all(np.roll(faces, s, axis=1) == ff, axis=1)
+    flipped = ~same
+    if flipped.sum() > len(faces) / 2:  # bfs 從少數方向的面開始 → 改成翻另一半
+        flipped = same
+    out = faces.copy()
+    out[flipped] = faces[flipped][:, ::-1]
+    return out, np.flatnonzero(flipped)
+
+
 def unfold(x, faces, body=None, margin=0.5, rounds=6, steps=5, max_ring=None):
     """縫完後把尖角三角形攤平：只動反折面的頂點和周圍幾圈，往鄰居平均位置拉（局部 Laplacian 平滑），
     再推回身體外。還有反折就把範圍往外擴一圈再做，最多 rounds 輪。回傳 (新位置, 說明 dict)。
@@ -186,16 +202,22 @@ def unfold(x, faces, body=None, margin=0.5, rounds=6, steps=5, max_ring=None):
                "最大位移": round(float(moved.max()), 2)}
 
 
-def write_obj_with_new_positions(src, dst, vertices):
-    """沿用原 OBJ 的 vt、f、mtl，只把 v 行換成新位置。"""
-    out, k = [], 0
+def write_obj_with_new_positions(src, dst, vertices, flip=()):
+    """沿用原 OBJ 的 vt、f、mtl，只把 v 行換成新位置。flip：要反轉頂點順序的面編號（orient_faces 的結果）。"""
+    out, k, fi, flip = [], 0, 0, set(int(i) for i in flip)
     for line in Path(src).read_text().splitlines():
         if line.startswith("v "):
             out.append("v {:.6f} {:.6f} {:.6f}".format(*vertices[k]))
             k += 1
+        elif line.startswith("f "):
+            tok = line.split()[1:]
+            assert len(tok) == 3, "只支援三角形面"
+            out.append("f " + " ".join(tok[::-1] if fi in flip else tok))
+            fi += 1
         else:
             out.append(line)
     assert k == len(vertices)
+    assert not flip or max(flip) < fi
     Path(dst).write_text("\n".join(out) + "\n")
 
 
