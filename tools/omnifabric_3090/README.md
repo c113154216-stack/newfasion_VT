@@ -24,6 +24,18 @@ bash go.sh              # 沒問題再跑全部
 - 缺東西會停下來列出缺什麼，補齊後**重跑同一個指令**；中斷了也是重跑，會接著做
 - 跑完帶回 `~/omnifabric_out/collect/`；出錯帶回 `~/omnifabric_out/setup.log` 或 `<衣服>.log` 最後 50 行
 
+### 背景跑、看進度（2026-11-12）
+
+```bash
+bash go_bg.sh h05       # 背景跑（參數同 go.sh），關掉終端機、斷線都會繼續；顯示卡被別人佔著會先等它空出來
+bash status.sh          # 看進度：每件跑到第幾步、最後一行輸出、顯示卡、做好的有哪些
+bash status.sh -w       # 每 30 秒自動更新，Ctrl+C 離開（不會停掉程式）
+bash stop.sh            # 停掉；之後再 go_bg.sh 會接著做
+```
+
+- 開始前要空出至少 20000 MiB 顯示卡記憶體，改門檻：`MIN_FREE_MB=18000 bash go_bg.sh h05`
+- 總 log：`~/omnifabric_out/go.log`
+
 下面是各步驟的細節，`go.sh` 出問題時才需要看。
 
 ---
