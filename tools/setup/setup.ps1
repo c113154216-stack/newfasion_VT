@@ -3,7 +3,7 @@
 # 會做的事（已經有的會跳過，可以重複執行）：
 #   1. 抓 ChatGarment、GarmentCodeRC、DeepBump 原始碼到 third_party/（固定在測試過的版本）
 #   2. 在 ChatGarment 建 assets 連結，指向 GarmentCodeRC/assets（作者 README 的步驟 6）
-#   3. 建 .venv（GarmentCode 環境）並安裝 tools/chatgarment/requirements.txt
+#   3. 建 .venv（GarmentCode 環境）並安裝 flows/body_fit/requirements.txt
 #   4. 建 .venv-chatgarment（ChatGarment 環境，PyTorch CUDA 12.8）並安裝 requirements-ai.txt
 #   5. 檢查不能自動下載的檔案（ChatGarment 權重、SMPL-X 權重），缺的話告訴你去哪裡拿
 #
@@ -62,13 +62,13 @@ if (Test-Path $link) {
 Step "3. .venv（GarmentCode 環境）"
 if (-not (Test-Path ".venv\Scripts\python.exe")) { Invoke-Expression "$Py -m venv .venv" }
 & .venv\Scripts\python -m pip install --upgrade pip -q
-& .venv\Scripts\python -m pip install -r tools\chatgarment\requirements.txt
+& .venv\Scripts\python -m pip install -r flows\body_fit\requirements.txt
 
 # ---- 4. ChatGarment 環境 ----
 Step "4. .venv-chatgarment（ChatGarment 環境，約 3～4 GB）"
 if (-not (Test-Path ".venv-chatgarment\Scripts\python.exe")) { Invoke-Expression "$Py -m venv .venv-chatgarment" }
 & .venv-chatgarment\Scripts\python -m pip install --upgrade pip -q
-& .venv-chatgarment\Scripts\python -m pip install -r tools\chatgarment\requirements-ai.txt
+& .venv-chatgarment\Scripts\python -m pip install -r flows\body_fit\requirements-ai.txt
 
 # ---- 5. 不能自動下載的檔案 ----
 Step "5. 需要手動放置的檔案"

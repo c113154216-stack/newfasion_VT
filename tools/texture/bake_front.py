@@ -37,7 +37,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO / "tools" / "chatgarment"))
+sys.path.insert(0, str(REPO / "flows" / "body_fit"))
 from gallery import draw, shaded  # noqa: E402
 from align_panels import align_panels  # noqa: E402
 import matplotlib.collections  # noqa: E402

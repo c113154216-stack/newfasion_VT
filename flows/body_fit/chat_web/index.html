@@ -1,0 +1,419 @@
+<!doctype html>
+<!--
+  和 ChatGarment 互動：照片 → 衣服、只描述、文字 → 衣服、修改衣服、自由提問。
+  由 flows/body_fit/chat_server.py 提供（http://127.0.0.1:8800/），不要直接開這個檔案。
+-->
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ChatGarment 互動</title>
+  <script type="importmap">
+    { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    } }
+  </script>
+  <style>
+    :root { --bg: #f4f4f2; --panel: #fff; --line: #dcdcd8; --text: #1d1d1b; --muted: #66665f; --accent: #2f6fd6;
+            --soft: #eef3fc; --warn: #b3261e; --ok: #1e7b45; --code: #f7f7f5; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) { --bg: #1b1d21; --panel: #23262c; --line: #3a3f47; --text: #e6e6e6; --muted: #9aa0a6;
+        --accent: #5b9bff; --soft: #233047; --warn: #f2b8b5; --ok: #8fd6a8; --code: #1e2126; }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.55 "Microsoft JhengHei", system-ui, sans-serif; }
+    body { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100dvh; overflow: hidden; }
+    header { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+    header h1 { font-size: 15px; margin: 0; }
+    header .muted { font-size: 12px; }
+    main { display: grid; grid-template-columns: 340px minmax(0, 1fr) minmax(0, 1.2fr); min-height: 0; }
+    section { min-height: 0; overflow: auto; padding: 12px 14px; border-right: 1px solid var(--line); }
+    section:last-child { border-right: 0; }
+    h2 { font-size: 13px; margin: 0 0 8px; }
+    h3 { font-size: 12px; margin: 12px 0 4px; color: var(--muted); font-weight: normal; }
+    .muted { color: var(--muted); }
+    button, select, input, textarea { font: inherit; color: var(--text); }
+    button { background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button:disabled { opacity: .5; cursor: wait; }
+    input[type=text], select, textarea { width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+    textarea { resize: vertical; min-height: 60px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+    .tabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .pane { display: none; }
+    .pane.on { display: block; }
+    .hint { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+    .row { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 6px; align-items: center; margin: 4px 0; }
+    .row label { color: var(--muted); font-size: 12px; }
+    #editRows .row { grid-template-columns: 150px minmax(0, 1fr); }
+    fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px 8px; margin: 0 0 8px; }
+    legend { padding: 0 4px; }
+    .drop { border: 1px dashed var(--line); border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; margin-bottom: 8px; }
+    .drop img { max-width: 100%; max-height: 220px; display: block; margin: 0 auto; }
+    .presets { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+    .presets button { font-size: 12px; padding: 2px 8px; }
+    .msg { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }
+    .msg .who { font-size: 12px; color: var(--muted); display: flex; gap: 8px; justify-content: space-between; }
+    .msg pre { white-space: pre-wrap; word-break: break-word; background: var(--code); border-radius: 6px; padding: 6px 8px; margin: 4px 0 0;
+               font: 12px/1.45 ui-monospace, Consolas, monospace; max-height: 260px; overflow: auto; }
+    .msg.user { background: var(--soft); }
+    .msg.error { border-color: var(--warn); color: var(--warn); }
+    details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .chip { border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; font-size: 12px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+    .actions label { font-size: 12px; color: var(--muted); display: flex; gap: 3px; align-items: center; }
+    #viewer { position: relative; height: 420px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); overflow: hidden; }
+    #viewer canvas { display: block; }
+    #viewerNote { position: absolute; left: 8px; bottom: 6px; font-size: 12px; color: var(--muted); pointer-events: none; }
+    .partbar { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+    .patterns { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+    .patterns figure { margin: 0; border: 1px solid var(--line); border-radius: 8px; padding: 6px; background: var(--panel); }
+    .patterns img { width: 100%; display: block; }
+    .patterns figcaption { font-size: 12px; color: var(--muted); }
+    table { border-collapse: collapse; width: 100%; font-size: 12px; }
+    td { border-bottom: 1px solid var(--line); padding: 2px 4px; vertical-align: top; }
+    td:first-child { color: var(--muted); white-space: nowrap; }
+    .fix { color: var(--ok); }
+    .empty { color: var(--muted); padding: 30px 0; text-align: center; }
+    @media (max-width: 1100px) { main { grid-template-columns: 1fr; overflow: auto; } section { border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; } body { overflow: auto; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>ChatGarment 互動</h1>
+  <span class="muted" id="info">連線中…</span>
+</header>
+<main>
+  <!-- 左：問什麼 -->
+  <section>
+    <div class="tabs" id="tabs">
+      <button data-mode="photo" aria-pressed="true">照片 → 衣服</button>
+      <button data-mode="describe">只描述</button>
+      <button data-mode="text">文字 → 衣服</button>
+      <button data-mode="edit">修改衣服</button>
+      <button data-mode="free">自由提問</button>
+    </div>
+
+    <div class="pane" data-pane="photo describe free">
+      <div class="drop" id="drop"><span class="muted">點這裡或拖照片進來</span></div>
+      <input type="file" id="file" accept="image/*" hidden>
+    </div>
+
+    <div class="pane" data-pane="photo">
+      <p class="hint">作者的兩步驟：先請模型用 JSON 描述衣服，再根據照片＋描述輸出版型（文字＋76 個數值）。</p>
+    </div>
+    <div class="pane" data-pane="describe">
+      <p class="hint">只問第一步：衣服的款式描述（種類、寬度、長度、袖子、領子、帽子、其他細節）。</p>
+    </div>
+
+    <div class="pane" data-pane="text">
+      <p class="hint">不用照片，從結構化描述生成衣服。作者是用 GPT-4o 把一句話轉成這個格式，這裡直接填（逗號分隔多個詞）。</p>
+      <div class="presets" id="textPresets"></div>
+      <div id="garmentForms"></div>
+    </div>
+
+    <div class="pane" data-pane="edit">
+      <p class="hint">選一件已經產生版片的衣服，指定要改的部位和改完的樣子。模型會看舊款式（簡化成文字）再輸出新款式。</p>
+      <div class="row"><label>原本的衣服</label><select id="editBase"></select></div>
+      <div class="row"><label>哪一件</label><select id="editPart"><option value="upper">上衣（design_upper）</option><option value="wholebody">連身（design_wholebody）</option><option value="lower">下身（design_lower）</option></select></div>
+      <div class="presets" id="editPresets"></div>
+      <div id="editRows"></div>
+      <button id="addEdit">＋ 加一個部位</button>
+    </div>
+
+    <div class="pane" data-pane="free">
+      <p class="hint">任意問題，照片可給可不給。用來看模型除了版型還會回答什麼（它是從 LLaVA-1.5 微調的）。</p>
+      <textarea id="freeQ" rows="4">What is the person wearing? Describe the garments.</textarea>
+      <div class="presets" id="freePresets"></div>
+    </div>
+
+    <div class="actions">
+      <button class="primary" id="run">送出</button>
+      <span class="muted" id="status"></span>
+    </div>
+
+    <h3>紀錄</h3>
+    <div id="history" class="chips"></div>
+  </section>
+
+  <!-- 中：對話 -->
+  <section>
+    <h2>對話（模型實際收到的問題與回答）</h2>
+    <div id="chat"><div class="empty">左邊選一種問法開始</div></div>
+  </section>
+
+  <!-- 右：結果 -->
+  <section>
+    <h2>結果</h2>
+    <div class="actions">
+      <button id="build" disabled>產生版片</button>
+      <label><input type="checkbox" id="optSew">縫到身上（約 1～2 分鐘）</label>
+      <label><input type="checkbox" id="optRaw">不套用我們的修正</label>
+      <label><input type="checkbox" id="optLower">下身也做</label>
+    </div>
+    <div class="partbar" id="partbar"></div>
+    <div id="viewer"><div id="viewerNote">產生版片後顯示 3D</div></div>
+    <div id="fixes"></div>
+    <h3>版片</h3>
+    <div class="patterns" id="patterns"><div class="empty">還沒有版片</div></div>
+    <h3>款式參數（GarmentCode）</h3>
+    <div id="params"><div class="empty">—</div></div>
+  </section>
+</main>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+let mode = "photo", image = null, current = null, built = null;
+
+// ---------- 分頁 ----------
+function setMode(m) {
+  mode = m;
+  for (const x of $("tabs").children) x.setAttribute("aria-pressed", x.dataset.mode === m);
+  for (const p of document.querySelectorAll(".pane")) p.classList.toggle("on", p.dataset.pane.split(" ").includes(m));
+  if (m === "edit") refreshHistory();
+}
+$("tabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setMode(b.dataset.mode); });
+setMode("photo");
+
+// ---------- 照片 ----------
+const drop = $("drop");
+drop.addEventListener("click", () => $("file").click());
+drop.addEventListener("dragover", (e) => e.preventDefault());
+drop.addEventListener("drop", (e) => { e.preventDefault(); if (e.dataTransfer.files[0]) readImage(e.dataTransfer.files[0]); });
+$("file").addEventListener("change", (e) => e.target.files[0] && readImage(e.target.files[0]));
+function readImage(file) {
+  const r = new FileReader();
+  r.onload = () => { image = r.result; drop.innerHTML = `<img src="${image}" alt="上傳的照片">`; };
+  r.readAsDataURL(file);
+}
+
+// ---------- 文字 → 衣服 ----------
+const SLOTS = {
+  "upperbody garment": { label: "上衣", keys: ["width", "length", "sleeves", "collar", "hood", "extra"] },
+  "lowerbody garment": { label: "下身", keys: ["width", "length", "pant legs", "waist", "skirt hems", "extra"] },
+  "wholebody garment": { label: "連身", keys: ["width", "length", "sleeves", "collar", "dress", "skirt hems", "extra"] },
+};
+const TEXT_PRESETS = {
+  "圓領短袖 T＋長褲": { "upperbody garment": ["T-shirt", { width: "normal", length: "normal", sleeves: "short sleeves", collar: "crew neck", hood: "no hood" }],
+                       "lowerbody garment": ["pants", { width: "loose", length: "long", "pant legs": "long legs, loose legs, straight legs" }] },
+  "V 領無袖＋短褲": { "upperbody garment": ["shirt", { width: "normal", length: "normal", sleeves: "sleeveless", collar: "V-neck" }],
+                     "lowerbody garment": ["shorts", { length: "short", "pant legs": "short legs" }] },
+  "帽 T": { "upperbody garment": ["hoodie", { width: "wide", length: "normal", sleeves: "long sleeves, loose sleeves", collar: "collarless", hood: "normal hood", extra: "ribbed cuffs" }] },
+  "高領長袖毛衣": { "upperbody garment": ["sweater", { width: "normal", length: "long", sleeves: "long sleeves, tight sleeves", collar: "turtle neck", hood: "no hood" }] },
+  "長袖洋裝": { "wholebody garment": ["dress", { width: "normal", length: "long", sleeves: "long sleeves", collar: "crew neck", dress: "long dress, loose dress", "skirt hems": "A-line hem" }] },
+  "短版泡泡袖": { "upperbody garment": ["crop top", { width: "narrow", length: "short", sleeves: "short sleeves, puff sleeves", collar: "square neck" }] },
+};
+function garmentForms() {
+  $("garmentForms").innerHTML = Object.entries(SLOTS).map(([slot, s]) => `
+    <fieldset data-slot="${slot}">
+      <legend><label><input type="checkbox" class="on"> ${s.label}</label></legend>
+      <div class="row"><label>種類</label><input type="text" class="name" placeholder="例如 T-shirt、hoodie、pants、dress"></div>
+      ${s.keys.map((k) => `<div class="row"><label>${k}</label><input type="text" data-key="${k}"></div>`).join("")}
+    </fieldset>`).join("");
+}
+function applyTextPreset(p) {
+  for (const fs of $("garmentForms").querySelectorAll("fieldset")) {
+    const v = p[fs.dataset.slot];
+    fs.querySelector(".on").checked = !!v;
+    fs.querySelector(".name").value = v ? v[0] : "";
+    for (const inp of fs.querySelectorAll("[data-key]")) inp.value = v ? (v[1][inp.dataset.key] || "") : "";
+  }
+}
+function textGarments() {
+  const out = {};
+  for (const fs of $("garmentForms").querySelectorAll("fieldset")) {
+    if (!fs.querySelector(".on").checked) continue;
+    const styles = {};
+    for (const inp of fs.querySelectorAll("[data-key]")) {
+      const words = inp.value.split(",").map((w) => w.trim()).filter(Boolean);
+      if (words.length || inp.dataset.key === "extra") styles[inp.dataset.key] = words;
+    }
+    out[fs.dataset.slot] = { garment_name: fs.querySelector(".name").value.trim() || "garment", geometry_styles: styles };
+  }
+  return out;
+}
+garmentForms();
+$("textPresets").innerHTML = Object.keys(TEXT_PRESETS).map((k) => `<button>${k}</button>`).join("");
+$("textPresets").addEventListener("click", (e) => e.target.tagName === "BUTTON" && applyTextPreset(TEXT_PRESETS[e.target.textContent]));
+applyTextPreset(TEXT_PRESETS["圓領短袖 T＋長褲"]);
+
+// ---------- 修改衣服 ----------
+const EDIT_PARTS = ["collar and neckline", "sleeves", "sleeve_cuff", "shirt main body panel", "waistband", "skirt", "pants", "pant_cuff"];
+const EDIT_PRESETS = {
+  "改圓領＋無袖（作者範例）": { "collar and neckline": "crew neck", sleeves: "sleeveless" },
+  "改 V 領": { "collar and neckline": "V-neck" },
+  "改長袖": { sleeves: "long sleeves" },
+  "改短袖": { sleeves: "short sleeves" },
+  "加帽子": { "collar and neckline": "hood" },
+  "衣身變長變寬": { "shirt main body panel": "long, loose" },
+  "袖口加縮口": { sleeve_cuff: "ribbed cuffs, tight cuffs" },
+};
+function editRow(part = "sleeves", text = "") {
+  const div = document.createElement("div");
+  div.className = "row";
+  div.innerHTML = `<select>${EDIT_PARTS.map((p) => `<option${p === part ? " selected" : ""}>${p}</option>`).join("")}</select>
+                   <input type="text" placeholder="改完的樣子，逗號分隔" value="${esc(text)}">`;
+  $("editRows").append(div);
+}
+$("addEdit").addEventListener("click", () => editRow());
+$("editPresets").innerHTML = Object.keys(EDIT_PRESETS).map((k) => `<button>${k}</button>`).join("");
+$("editPresets").addEventListener("click", (e) => {
+  if (e.target.tagName !== "BUTTON") return;
+  $("editRows").innerHTML = "";
+  for (const [p, t] of Object.entries(EDIT_PRESETS[e.target.textContent])) editRow(p, t);
+});
+editRow("collar and neckline", "crew neck"); editRow("sleeves", "sleeveless");
+function edits() {
+  const out = {};
+  for (const r of $("editRows").children) {
+    const words = r.querySelector("input").value.split(",").map((w) => w.trim()).filter(Boolean);
+    if (words.length) out[r.querySelector("select").value] = words;
+  }
+  return out;
+}
+
+// ---------- 自由提問 ----------
+const FREE = ["What is the person wearing? Describe the garments.", "What color is the shirt?", "Is this garment suitable for winter? Why?",
+              "Can you describe the geometry features of the garments worn by the model in the Json format?", "How many people are in the image?"];
+$("freePresets").innerHTML = FREE.map((q) => `<button title="${esc(q)}">${esc(q.slice(0, 26))}…</button>`).join("");
+$("freePresets").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) $("freeQ").value = b.title; });
+
+// ---------- 送出 ----------
+const LABEL = { photo: "照片 → 衣服", describe: "只描述", text: "文字 → 衣服", edit: "修改衣服", free: "自由提問" };
+async function post(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+function addMsg(html, cls = "") {
+  if ($("chat").querySelector(".empty")) $("chat").innerHTML = "";
+  const d = document.createElement("div"); d.className = "msg " + cls; d.innerHTML = html;
+  $("chat").prepend(d); return d;
+}
+function busy(on, text = "") {
+  $("run").disabled = on; $("build").disabled = on || !current?.pred;
+  $("status").textContent = text;
+}
+$("run").addEventListener("click", async () => {
+  const req = { mode };
+  if (["photo", "describe", "free"].includes(mode) && image) req.image = image;
+  if (mode === "text") req.garments = textGarments();
+  if (mode === "edit") { req.base = $("editBase").value; req.part = $("editPart").value; req.edits = edits(); }
+  if (mode === "free") req.question = $("freeQ").value;
+  const t0 = performance.now();
+  const tick = setInterval(() => busy(true, `模型思考中… ${((performance.now() - t0) / 1000).toFixed(0)} 秒`), 500);
+  busy(true, "模型思考中…");
+  const userNote = mode === "text" ? `<pre>${esc(JSON.stringify(req.garments, null, 1))}</pre>`
+                 : mode === "edit" ? `<pre>${esc(req.base + "（" + req.part + "）\n" + JSON.stringify(req.edits, null, 1))}</pre>`
+                 : mode === "free" ? `<pre>${esc(req.question)}</pre>` : "";
+  addMsg(`<div class="who"><b>你｜${LABEL[mode]}</b>${req.image ? "<span>附照片</span>" : ""}</div>${userNote}`, "user");
+  try {
+    const res = await post("/api/run", req);
+    current = res; built = null;
+    for (const step of res.log) {
+      addMsg(`<div class="who"><b>ChatGarment</b><span>${step.seconds} 秒${step.floats ? `｜數值 ${step.floats.length} 個` : ""}</span></div>
+        <details><summary>模型收到的問題</summary><pre>${esc(step.question)}</pre></details>
+        <pre>${esc(step.answer)}</pre>
+        ${step.floats ? `<details><summary>數值（0～1，依 all_float_paths 對到參數）</summary><pre>${esc(step.floats.join(", "))}</pre></details>` : ""}`);
+    }
+    if (res.pred) { $("build").disabled = false; $("status").textContent = `完成（${res.id}），可以按「產生版片」`; }
+    else $("status").textContent = `完成（${res.id}）`;
+    refreshHistory();
+  } catch (err) {
+    addMsg(`<b>錯誤</b><pre>${esc(err.message)}</pre>`, "error"); $("status").textContent = "";
+  } finally { clearInterval(tick); $("run").disabled = false; $("build").disabled = !current?.pred; }
+});
+
+// ---------- 產生版片 ----------
+$("build").addEventListener("click", () => current && buildFor(current.id));
+async function buildFor(id) {
+  const t0 = performance.now();
+  const tick = setInterval(() => busy(true, `產生版片中… ${((performance.now() - t0) / 1000).toFixed(0)} 秒`), 500);
+  try {
+    built = await post("/api/build", { id, sew: $("optSew").checked, raw: $("optRaw").checked, lower: $("optLower").checked });
+    showBuilt(built); $("status").textContent = `版片完成（${id}）`; refreshHistory();
+  } catch (err) {
+    addMsg(`<b>產生版片失敗</b><pre>${esc(err.message)}</pre>`, "error"); $("status").textContent = "";
+  } finally { clearInterval(tick); $("run").disabled = false; $("build").disabled = !current?.pred; }
+}
+const PART_LABEL = { upper: "上衣", lower: "下身", wholebody: "連身" };
+function showBuilt(b) {
+  $("fixes").innerHTML = b.raw ? `<p class="hint">沒有套用修正（ChatGarment 原本的輸出）</p>`
+    : b.fixes.length ? `<h3>我們的修正</h3>${b.fixes.map((f) => `<div class="fix">✓ ${esc(f)}</div>`).join("")}` : `<p class="hint">不需要修正</p>`;
+  $("patterns").innerHTML = b.parts.map((p) => p.error ? `<figure><figcaption>${PART_LABEL[p.part]}：組不出版片<br>${esc(p.error)}</figcaption></figure>`
+    : `<figure><img src="/files/${p.pattern}" alt="${PART_LABEL[p.part]}版片"><figcaption>${PART_LABEL[p.part]}｜${esc(p.summary || "")}</figcaption></figure>`).join("")
+    || `<div class="empty">沒有可做的部位</div>`;
+  $("partbar").innerHTML = b.parts.filter((p) => !p.error).map((p, i) => `<button data-i="${i}">${PART_LABEL[p.part]}${p.sewn ? "（已縫）" : "（未縫）"}</button>`).join("");
+  const good = b.parts.filter((p) => !p.error);
+  if (good.length) showPart(good[0]);
+  $("partbar").onclick = (e) => { const x = e.target.closest("button"); if (x) showPart(good[+x.dataset.i]); };
+}
+function showPart(p) {
+  const rows = Object.entries(p.params).filter(([, v]) => v !== null && v !== false && v !== undefined)
+    .map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(typeof v === "number" ? +v.toFixed(3) : v)}</td></tr>`).join("");
+  $("params").innerHTML = `<table>${rows}</table><p class="hint">只列出有值的參數（null、false 省略）</p>`;
+  loadMesh(p);
+}
+
+// ---------- 3D ----------
+const view = $("viewer");
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(devicePixelRatio);
+view.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 1, 1, 2000);
+camera.position.set(0, 120, 260);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 110, 0);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a80, 2.2));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(80, 200, 160); scene.add(sun);
+let body = null, garment = null;
+new OBJLoader().load("/body.obj", (o) => {
+  o.scale.setScalar(100);
+  o.traverse((m) => { if (m.isMesh) { m.material = new THREE.MeshStandardMaterial({ color: 0xc9c4bb, roughness: .9 }); m.geometry.computeVertexNormals(); } });
+  body = o; scene.add(o);
+});
+function loadMesh(p) {
+  if (garment) scene.remove(garment);
+  $("viewerNote").textContent = "載入中…";
+  new OBJLoader().load(`/files/${p.obj}?t=${Date.now()}`, (o) => {
+    o.traverse((m) => { if (m.isMesh) { m.material = new THREE.MeshStandardMaterial({ color: 0x3f7fd9, roughness: .8, side: THREE.DoubleSide }); m.geometry.computeVertexNormals(); } });
+    garment = o; scene.add(o);
+    $("viewerNote").textContent = `${PART_LABEL[p.part]}｜${p.sewn ? "縫好（新縫合）" : "未縫（GarmentCode 版片排在身體周圍）"}｜拖曳旋轉、滾輪縮放`;
+  });
+}
+function resize() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+new ResizeObserver(resize).observe(view); resize();
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+
+// ---------- 紀錄 ----------
+async function refreshHistory() {
+  const items = await (await fetch("/api/history")).json();
+  $("history").innerHTML = items.map((it) => `<button class="chip" data-id="${it.id}" title="${it.built.join("、") || "還沒產生版片"}">${esc(it.id)}</button>`).join("")
+    || `<span class="muted">還沒有紀錄</span>`;
+  const sel = $("editBase"), keep = sel.value;
+  sel.innerHTML = items.filter((it) => it.built.length).map((it) => `<option value="${it.id}">${it.id}（${it.built.map((b) => b.replace("design_", "").replace(".yaml", "")).join("、")}）</option>`).join("")
+    || `<option value="">先用其他方式產生一件衣服並按「產生版片」</option>`;
+  if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
+}
+$("history").addEventListener("click", async (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  current = { id: b.dataset.id, pred: true }; $("build").disabled = false;
+  $("status").textContent = `選了 ${b.dataset.id}，按「產生版片」重新看`;
+});
+
+const info = await (await fetch("/api/info")).json();
+$("info").textContent = `模型：${info.model}`;
+refreshHistory();
+</script>
+</body>
+</html>

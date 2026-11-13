@@ -1,6 +1,6 @@
 # bf16_i 總表（50 件）
 
-由 `tools/chatgarment/experiments/batch_table.py` 產生。參數是 `to_design.py` 修正後的（款式修正已套用，衣長、領深校正還沒套用）。
+由 `flows/body_fit/experiments/batch_table.py` 產生。參數是 `to_design.py` 修正後的（款式修正已套用，衣長、領深校正還沒套用）。
 
 - **衣長**：`shirt.length`（GarmentCode 預設 1.2）；**寬鬆**：`shirt.width`（1.0～1.3）；**袖長**：`sleeve.length`（1＝到手腕附近）
 - **描述有袖口**：AI 描述的 extra 有寫 cuffs（例如 ribbed cuffs）；**袖口參數**：`sleeve.cuff.type`

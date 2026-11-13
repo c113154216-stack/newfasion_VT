@@ -45,6 +45,11 @@ node --test web/tests/sizing.test.mjs
 
 | 路徑 | 內容 |
 |---|---|
+| `flows/` | 衣物生成的兩條流程（[說明](flows/README.md)） |
+| `flows/body_fit/` | 照身體生成貼身衣物（主流程）：照片 → ChatGarment 款式 → 照身體校正 → 打版、縫合 → 匯出給 engine |
+| `flows/size_chart/` | 照廠商尺寸表打版：胸寬、衣長、袖長照尺寸表，S／M／L 各一件；尺寸資料在 `網路衣服_尺寸資料/` |
+| `tools/` | 其他工具：`texture/`（照片貼圖）、`omnifabric_3090/`（OmniFabric 在 3090 上跑）、`setup/`（環境安裝） |
+| `results/chatgarment_ai/` | ChatGarment 推論結果（款式描述、參數、design.yaml） |
 | `legacy/` | 從舊專案 `3Dclothes_project` 複製過來、可能用到的程式，保留原目錄結構，作為參考與起點 |
 | `legacy/geometry_physics/` | SMPL-X 人體、衣服貼合、蒙皮權重（`body_model.py`）、部位縮放（`geometry_engine.py`） |
 | `legacy/adapters/` | 舊版 M2～M4 adapter、GLB 匯出（含貼圖版） |

@@ -1,6 +1,6 @@
 # 第三批領口比對（bf16，50 件）
 
-由 `tools/chatgarment/experiments/neck_report.py` 產生。正確答案＝`labels.json` 的組別（照商品頁寫的領型）。
+由 `flows/body_fit/experiments/neck_report.py` 產生。正確答案＝`labels.json` 的組別（照商品頁寫的領型）。
 
 - **描述**：AI 第一步文字描述的 collar／hood 有沒有寫出正確領型
 - **原始版型**：AI 第二步的 GarmentCode 參數（前領形狀＋領子配件）
