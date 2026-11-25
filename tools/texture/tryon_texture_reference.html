@@ -1,0 +1,199 @@
+<!doctype html>
+<!--
+  試穿頁加貼圖的參考實作（給 Complete_System/tryon/index.html 參考）：照試穿頁的方式讀衣服 OBJ（頂點順序＝串流順序），
+  再讀 spec_batch_export.py --textures 輸出的 _uv.json、_color.png、_normal.png、parts_attach.json。
+  「動畫」按鈕模擬每幀串流進來新的頂點位置（這裡是把 T-pose 衣服輕微擺動），驗證貼圖和扣子會跟著布走。
+  從 newfashion_VT 根目錄：python -m http.server 8766
+  開 http://localhost:8766/tools/texture/tryon_texture_reference.html?g=z02M_blue_cropped_shirt
+-->
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>試穿貼圖參考實作</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<style>
+  :root { --bg: #f4f4f2; --panel: #fff; --line: #dcdcd8; --text: #1d1d1b; --muted: #66665f; --accent: #2f6fd6; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #1b1d21; --panel: #23262c; --line: #3a3f47; --text: #e6e6e6; --muted: #9aa0a6; --accent: #5b9bff; }
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.5 "Microsoft JhengHei", system-ui, sans-serif; }
+  body { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100dvh; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0; }
+  button { font: inherit; padding: 4px 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 6px; cursor: pointer; }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  #info { color: var(--muted); font-size: 12px; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<header>
+  <h1>試穿貼圖參考實作</h1>
+  <button id="anim" aria-pressed="false">模擬串流（擺動）</button>
+  <span id="info"></span>
+</header>
+<canvas id="c"></canvas>
+<script type="module">
+import * as THREE from "three";
+import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const ROOT = "../../";
+const G = new URLSearchParams(location.search).get("g") || "z02M_blue_cropped_shirt";
+const DIR = `${ROOT}output/physics_export/size_chart/${G}/`;
+
+// ① 跟試穿頁一樣：OBJ 解析成有索引的幾何，頂點順序＝串流順序
+function parseObj(text) {
+  const v = [], f = [];
+  for (const line of text.split("\n")) {
+    const p = line.trim().split(/\s+/);
+    if (p[0] === "v") v.push(+p[1], +p[2], +p[3]);
+    else if (p[0] === "f") {
+      const idx = p.slice(1).map((t) => parseInt(t, 10) - 1);
+      for (let i = 1; i + 1 < idx.length; i++) f.push(idx[0], idx[i], idx[i + 1]);
+    }
+  }
+  return { v: new Float32Array(v), f: new Uint32Array(f) };
+}
+
+// ② 貼圖要的幾何：同一個頂點在不同版片上 UV 不同，所以照 (頂點, UV) 拆開；記住每個拆開的頂點來自串流的哪個頂點
+function splitByUV(mesh, uv) {
+  const key = new Map(), src = [], uvs = [], index = [];
+  for (let k = 0; k < mesh.f.length / 3; k++) {
+    for (let c = 0; c < 3; c++) {
+      const vi = mesh.f[3 * k + c], ti = uv.ft[k][c];
+      const kk = vi * 1e6 + ti;
+      let n = key.get(kk);
+      if (n === undefined) {
+        n = src.length; key.set(kk, n); src.push(vi); uvs.push(uv.vt[ti][0], uv.vt[ti][1]);
+      }
+      index.push(n);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(src.length * 3), 3));
+  g.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(src.length * 3), 3));
+  g.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(uvs), 2));
+  g.setIndex(index);
+  return { geom: g, src: Uint32Array.from(src) };
+}
+
+// ③ 每幀：在「沒拆開」的網格上算位置、法向（縫線處法向才連續，不會出現假的折痕），再照 src 抄過去
+const tmp = new THREE.BufferGeometry();
+function applyFrame(pos, mesh, split) {
+  tmp.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  tmp.setIndex(new THREE.BufferAttribute(mesh.f, 1));
+  tmp.computeVertexNormals();
+  const nrm = tmp.attributes.normal.array;
+  const P = split.geom.attributes.position.array, N = split.geom.attributes.normal.array;
+  for (let i = 0; i < split.src.length; i++) {
+    const s = 3 * split.src[i];
+    P[3 * i] = pos[s]; P[3 * i + 1] = pos[s + 1]; P[3 * i + 2] = pos[s + 2];
+    N[3 * i] = nrm[s]; N[3 * i + 1] = nrm[s + 1]; N[3 * i + 2] = nrm[s + 2];
+  }
+  split.geom.attributes.position.needsUpdate = true;
+  split.geom.attributes.normal.needsUpdate = true;
+  split.geom.computeBoundingSphere();
+}
+
+// ④ 扣子：掛在某個三角形上（重心座標），每幀照三角形目前的位置、法向重擺
+function facePose(pos, f, k, bary) {
+  const a = [0, 1, 2].map((c) => new THREE.Vector3().fromArray(pos, 3 * f[3 * k + c]));
+  const p = a[0].clone().multiplyScalar(bary[0]).add(a[1].clone().multiplyScalar(bary[1])).add(a[2].clone().multiplyScalar(bary[2]));
+  const n = new THREE.Vector3().subVectors(a[1], a[0]).cross(new THREE.Vector3().subVectors(a[2], a[0])).normalize();
+  if (n.z < 0) n.negate();  // 前片朝前
+  return { p, n };
+}
+
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("c"), antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#f4f4f2");
+scene.add(new THREE.HemisphereLight(0xffffff, 0x666666, 1.6));
+const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(0.6, 1.2, 1.4); scene.add(key);
+const camera = new THREE.PerspectiveCamera(30, 1, 0.01, 20);
+const controls = new OrbitControls(camera, renderer.domElement);
+
+const objText = await (await fetch(`${DIR}${G}.obj`)).text();
+const mesh = parseObj(objText);
+const uv = await (await fetch(`${DIR}${G}_uv.json`)).json();
+const loader = new THREE.TextureLoader();
+const color = await loader.loadAsync(`${DIR}${uv.color}`); color.colorSpace = THREE.SRGBColorSpace; color.anisotropy = 8;
+const normal = await loader.loadAsync(`${DIR}${uv.normal}`); normal.anisotropy = 8;
+const split = splitByUV(mesh, uv);
+const cloth = new THREE.Mesh(split.geom, new THREE.MeshStandardMaterial({
+  map: color, normalMap: normal, normalScale: new THREE.Vector2(1.6, 1.6), roughness: 0.85, side: THREE.DoubleSide }));
+cloth.frustumCulled = false;
+scene.add(cloth);
+applyFrame(mesh.v, mesh, split);
+
+// 扣子：parts.obj 裡每顆是一個 o 物件；用 rest 時的位置、法向算「相對座標」，之後每幀照三角形重擺
+const buttons = [];
+let att = null;
+try { att = await (await fetch(`${DIR}parts_attach.json`)).json(); } catch (e) { /* 沒有零件 */ }
+if (att) {
+  const parts = await new OBJLoader().loadAsync(`${DIR}parts.obj`);
+  for (const pt of att.parts.filter((p) => p.kind === "button")) {
+    const o = parts.getObjectByName(pt.name);
+    if (!o) continue;
+    const rest = facePose(mesh.v, mesh.f, pt.face, pt.bary);
+    const g = o.geometry.clone();
+    g.translate(-rest.p.x, -rest.p.y, -rest.p.z);
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(rest.n, new THREE.Vector3(0, 0, 1)));
+    g.computeVertexNormals();
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: new THREE.Color(...pt.color), roughness: 0.35 }));
+    scene.add(m);
+    buttons.push({ m, pt });
+  }
+}
+function placeButtons(pos) {
+  for (const { m, pt } of buttons) {
+    const { p, n } = facePose(pos, mesh.f, pt.face, pt.bary);
+    m.position.copy(p);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
+  }
+}
+placeButtons(mesh.v);
+document.getElementById("info").textContent =
+  `${G}：串流頂點 ${mesh.v.length / 3}、拆開後 ${split.src.length}（UV 接縫），扣子 ${buttons.length}`;
+
+const box = new THREE.Box3().setFromObject(cloth);
+const mid = box.getCenter(new THREE.Vector3());
+controls.target.copy(mid); camera.position.set(mid.x + 0.5, mid.y + 0.2, 1.9); controls.update();
+
+// 模擬串流：每幀給一組新的頂點位置（這裡是 T-pose 加一點擺動），照 ③④ 更新
+let animate = false;
+const anim = document.getElementById("anim");
+anim.onclick = () => { animate = !animate; anim.setAttribute("aria-pressed", animate); if (!animate) { applyFrame(mesh.v, mesh, split); placeButtons(mesh.v); } };
+const pos = new Float32Array(mesh.v.length);
+function resize() {
+  const c = renderer.domElement;
+  renderer.setSize(c.clientWidth, c.clientHeight, false);
+  camera.aspect = c.clientWidth / c.clientHeight; camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize); resize();
+renderer.setAnimationLoop((t) => {
+  if (animate) {
+    const s = t / 1000;
+    for (let i = 0; i < pos.length; i += 3) {
+      const x = mesh.v[i], y = mesh.v[i + 1], z = mesh.v[i + 2];
+      pos[i] = x + 0.02 * Math.sin(2 * s + 6 * y);
+      pos[i + 1] = y;
+      pos[i + 2] = z + 0.03 * Math.sin(1.5 * s + 4 * x) * Math.max(0, 0.6 - y + 0.8);
+    }
+    applyFrame(pos, mesh, split);
+    placeButtons(pos);
+  }
+  renderer.render(scene, camera);
+});
+window.ref = { camera, controls };
+</script>
+</body>
+</html>

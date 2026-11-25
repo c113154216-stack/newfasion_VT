@@ -80,16 +80,26 @@ def measure(pattern):
                 for n in torso) / 2
     back = pts["right_btorso"]
     length = np.ptp(back[:, 1])
-    # 肩點：後片原始頂點中，在肩線上、離中心最遠的那個（袖籠曲線的上端）
-    bv = np.asarray(panels["right_btorso"]["vertices"], float)
-    top = bv[bv[:, 1] > bv[:, 1].max() - 8]
-    shoulder = 2 * np.abs(top[:, 0]).max()
+    if "wb_back" in panels:  # 下襬羅紋（腰帶）：尺寸表的衣長量到羅紋底
+        length += np.ptp(np.asarray(panels["wb_back"]["vertices"], float)[:, 1])
+    # 肩點：後片袖籠那條邊（label＝right_armhole）的上端。
+    # 2026-11-25 前用「離頂端 8 cm 內、離中心最遠的頂點」，Shirt 結果一樣；落肩版型（drop_shoulder.py）肩點比較低，會漏掉。
+    bp = panels["right_btorso"]
+    bv = np.asarray(bp["vertices"], float)
+    arm = [i for e in bp["edges"] if str(e.get("label", "")).endswith("armhole") for i in e["endpoints"]]
+    if arm:
+        shoulder = 2 * abs(bv[arm][bv[arm, 1].argmax(), 0])
+    else:
+        top = bv[bv[:, 1] > bv[:, 1].max() - 8]
+        shoulder = 2 * np.abs(top[:, 0]).max()
     # 袖長：袖片上沿（肩點到袖口的直邊）的長度
     sv = np.asarray(panels["right_sleeve_f"]["vertices"], float)
     sleeve = np.ptp(sv[:, 0])
-    cuff = [n for n in panels if "cuff" in n and n.startswith("right")]
+    # 袖口（GarmentCode 的袖口片叫 sl_right_cuff_f/b）：版片 x 是袖口圍、y 是袖口長（沿手臂方向）。
+    # 2026-11-24 前只找 right 開頭的片、又取 x，袖口一直沒算進去（袖長少 5.4 cm）。
+    cuff = [n for n in panels if n.endswith("right_cuff_f")]  # 這 7 件都是 CuffBand（沒有袖口裙片）
     if cuff:
-        sleeve += min(np.ptp(np.asarray(panels[c]["vertices"])[:, 0]) for c in cuff[:1])
+        sleeve += np.ptp(np.asarray(panels[cuff[0]]["vertices"], float)[:, 1])
     return {"chest": chest, "shoulder": shoulder, "length": length, "sleeve": sleeve}
 
 

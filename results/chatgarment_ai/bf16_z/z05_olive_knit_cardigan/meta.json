@@ -1,0 +1,7 @@
+{
+  "image": "/home/c113154216/3090/newfashion_VT/output/chatgarment_ai/inputs/z05_olive_knit_cardigan.png",
+  "mode": "bf16",
+  "seconds": 13.8,
+  "peak_gpu_gib": 15.44,
+  "n_floats": 152
+}

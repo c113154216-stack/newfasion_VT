@@ -73,9 +73,10 @@ def load_design(result_dir):
     return None
 
 
-def build(design, name, body_yaml, body_mesh):
-    """生成版片、縫合；回傳 (資料夾, 縫好的頂點 cm, 面, 縫合前的頂點 cm, 袖子頂點遮罩)。"""
-    _, _, paths = dm.generate(design, body_yaml, name, resolution=RESOLUTION)
+def build(design, name, body_yaml, body_mesh, resolution=None):
+    """生成版片、縫合；回傳 (資料夾, 縫好的頂點 cm, 面, 縫合前的頂點 cm, 袖子頂點遮罩)。
+    resolution：頂點間距（cm），不給就用 RESOLUTION（size_chart 的大件衣服會放大，讓頂點數不超過 engine 上限）。"""
+    _, _, paths = dm.generate(design, body_yaml, name, resolution=resolution or RESOLUTION)
     v, f = igl.read_triangle_mesh(str(paths.g_box_mesh))
     edges = mesh_edges(f)
     rest = rest_lengths(v, edges, pickle.loads(paths.g_orig_edge_len.read_bytes()))
