@@ -40,6 +40,13 @@ SOURCES = ROOT / "results" / "chatgarment_ai" / "bf16_z"
 OUT = ROOT / "output" / "physics_export" / "size_chart"
 ORDER = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "XXL"]
 NAMES = [("chest", "胸寬"), ("shoulder", "肩寬"), ("length", "衣長"), ("sleeve", "袖長"), ("hem", "下襬圍")]
+# 試穿頁清單的外觀欄位（Complete_System/tryon/index.html 的格式，11-18 趙丞章加的）：kind＝分類圖示（tee／hoodie／shirt／knit／outer）、
+# color＝衣服顏色（照商品照）、roughness＝材質粗糙度（同類沿用清單裡現有的值）。group＝"more"：放在「更多」，不擠掉他挑的主清單。
+STYLE = {
+    "z01": ("hoodie", "#1F1F20", 0.9), "z02": ("shirt", "#7D9CCB", 0.7), "z03": ("knit", "#D6C9B1", 0.95),
+    "z04": ("tee", "#3E3F41", 0.85), "z05": ("knit", "#6B6B45", 0.95), "z06": ("tee", "#EFEFEC", 0.85),
+    "z07": ("tee", "#22304D", 0.85),
+}
 
 
 def hood_pins(x, bv, bf):
@@ -146,9 +153,11 @@ def main(vto=None, only=None, suffix="", textures=False):
             }, ensure_ascii=False, indent=1), encoding="utf-8")
             shutil.copy(sdir / "量測.json", dst / "量測.json")
             name = f"{rec['衣服'].split('_', 1)[1]}・{sdir.name} 號" + (f"（{suffix.strip('_')}）" if suffix else "")
+            kind, color, rough = STYLE.get(gdir.name, ("tee", "#888888", 0.85))
             entries.append({"code": code, "name": name, "mesh": f"garment/meshes/neutral/{folder}",
                             "fit_type": None, "has_size_chart": False,
-                            "note": f"照廠商尺寸表 {sdir.name} 號打版；縫好量到／尺寸表（cm）：{summary(rec)}"})
+                            "note": f"照廠商尺寸表 {sdir.name} 號打版；縫好量到／尺寸表（cm）：{summary(rec)}",
+                            "color": color, "kind": kind, "group": "more", "roughness": rough})
             print(f"[{code}] {len(xm)} 頂點、固定點 {len(band)}" + (f"、帽子 {len(hood)}" if hood else "")
                   + f"、穿進身體 {100 * inside.mean():.2f}%、翻面 {len(flip)}" + (f"、貼圖：{tex_note}" if tex_note else ""), flush=True)
 
